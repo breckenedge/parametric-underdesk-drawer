@@ -1,0 +1,5 @@
+# generated outputs
+*.stl
+*.3mf
+*.echo
+*.png
