@@ -238,17 +238,57 @@ u_stop = U - stop_back;           // pin position when panel hits housing
 // and with momentum (arm swing, drawer bounce, pivot play – worse when the drawer isn't
 // level and nothing damps the arm) it can cut over to the exit. P2 drops straight first so
 // it reaches the exit diagonal (P3) low, and P3 climbs to above u_D: the drawer would have
-// to move back in ~2.1 mm mid-return to skip the catch (tools/cammargin.ps1; was 0.66).
-cam_paths = [
+// to move back in ~2.3 mm mid-return to skip the catch (tools/cammargin.ps1; was 0.66, 2.1 before
+// the corners were rounded).
+// Smooth corners: like the heart cams in the prior art, the pin's path has no kinks except where
+// it must: the ends of each path, which are where paths meet and so form the island's cusps (the
+// notch seat, the stroke ends, the mouth). A kink jerks the rigid arm sideways all at once and
+// friction can turn that into a stall (the old 45° corner on P4 made the drawer stutter); worse,
+// on the inside of a bend tighter than r_eff the groove wall is a sharp corner whatever the path
+// does. So every corner [u, v, radius] is rounded by a circular arc of that radius, tangent to
+// both legs, and no wall gets steeper than the straight legs it replaces. Radii are smaller where
+// a stroke end has to be reached before the panel stop (-0.8 mm tolerance) or the leg is short.
+function arc_pts(B, ea, ec, R) = let(
+    th = 180 - acos(max(-1, min(1, ea*ec))),          // turn angle
+    t = R*tan(th/2), p0 = B + ea*t, p2 = B + ec*t,
+    O = B + (ea + ec)/norm(ea + ec) * R/cos(th/2), w0 = p0 - O, w2 = p2 - O, n = max(2, ceil(th/5)))
+  th < 0.5 ? [B] : [for (k = [0:n]) let(s = k/n) O + (sin((1-s)*th)*w0 + sin(s*th)*w2)/sin(th)];
+function fillet_back(S, i) = let(A = [S[i-1][0], S[i-1][1]], B = [S[i][0], S[i][1]], C = [S[i+1][0], S[i+1][1]],
+    ea = (A - B)/norm(A - B), ec = (C - B)/norm(C - B)) S[i][2]*tan((180 - acos(max(-1, min(1, ea*ec))))/2);
+function fillet_path(S) = let(n = len(S)) [for (i = [0:n-1]) each
+  (i == 0 || i == n-1) ? [[S[i][0], S[i][1]]] :
+  let(A = [S[i-1][0], S[i-1][1]], B = [S[i][0], S[i][1]], C = [S[i+1][0], S[i+1][1]])
+  arc_pts(B, (A - B)/norm(A - B), (C - B)/norm(C - B), S[i][2])];
+// the arcs on each leg must fit inside it
+function fillet_fits(S) = min([for (i = [0:len(S)-2])
+  norm([S[i+1][0] - S[i][0], S[i+1][1] - S[i][1]]) - (i > 0 ? fillet_back(S, i) : 0) - (i+1 < len(S)-1 ? fillet_back(S, i+1) : 0)]) >= 0;
+// The right channel's top is one arc where the ramp meets the diagonal down to the stroke-1 end
+// (the 0.5 mm flat between them is too short to round each corner on its own). Its peak stays
+// below v_rc, which is kept as the channel's limit for the arm's swing room.
+function line_meet(P, d, Q, e) = let(t = ((Q[0]-P[0])*e[1] - (Q[1]-P[1])*e[0]) / (d[0]*e[1] - d[1]*e[0])) P + d*t;
+p1_top = line_meet([u_1, 0], [u_2 - u_1, v_rc], [u_D, v_tr], [u_C - u_D, v_rc - v_tr]);
+cam_spec = [
   // P1: entry straight, ramp, right channel, over to stroke-1 end
-  [[0,0],[u_1,0],[u_2,v_rc],[u_C,v_rc],[u_D,v_tr],[U,v_tr]],
+  [[0,0],[u_1,0,3],[p1_top[0],p1_top[1],2],[u_D,v_tr,2],[U,v_tr]],
   // P2: drop straight from stroke-1 end, then over into the notch
-  [[u_D,v_tr],[u_D-u_drop,v_tr],[u_a+0.6,v_n],[u_a,v_n]],
+  [[u_D,v_tr],[u_D-u_drop,v_tr,2],[u_a+0.6,v_n,1.4],[u_a,v_n]],
   // P3: notch straight up (from latched, a 4 mm push still re-latches; ~5 mm releases), then forced left to stroke-2 end
-  [[u_a,v_n],[u_a+2.8,v_n],[u_D+0.5,v_le],[U,v_le]],
-  // P4: exit around the left of the island back to the mouth, on a smooth S-curve
-  concat([[U,v_le]], p4_curve, [[abs(v_l),v_l],[0,0]])
+  [[u_a,v_n],[u_a+2.8,v_n,2.5],[u_D+0.5,v_le,2],[U,v_le]],
+  // P4 tail: from the S-curve's end along the left channel and diagonally back to the mouth
+  [[u_4e,v_l],[abs(v_l),v_l,3],[0,0]]
 ];
+for (S = cam_spec) assert(fillet_fits(S), str("corner arcs overlap on cam path ", S));
+p4_tail = fillet_path(cam_spec[3]);
+cam_paths = [
+  fillet_path(cam_spec[0]), fillet_path(cam_spec[1]), fillet_path(cam_spec[2]),
+  // P4: exit around the left of the island back to the mouth, on a smooth S-curve
+  concat([[U,v_le]], p4_curve, [for (i = [1:len(p4_tail)-1]) p4_tail[i]])
+];
+// tightest bend inside any path (the ends are the cusps), as the radius through three neighbouring
+// points, for the cam_paths dump
+function circ_r(a, b, c) = let(x = norm(b - a), y = norm(c - b), z = norm(c - a),
+  k = abs((b - a)[0]*(c - a)[1] - (b - a)[1]*(c - a)[0])) k < 1e-9 ? 1e9 : x*y*z/(2*k);
+cam_min_r = min([for (P = cam_paths) for (i = [1:len(P)-2]) circ_r(P[i-1], P[i], P[i+1])]);
 
 // the exit curve must leave a solid wall (cam_g centre to centre) to the entry, ramp and notch paths
 function seg_dist(p, a, b) = let(d = b - a, t = max(0, min(1, (p - a)*d / max(1e-9, d*d)))) norm(a + d*t - p);
@@ -518,9 +558,9 @@ module groove_cut() {
 
 module groove_2d() {   // the groove's outline in housing x/y
   {
-    // each segment split into short pieces so the arc correction follows it smoothly
-    n = 8;
-    for (p = cam_paths) for (i = [0:len(p)-2]) for (k = [0:n-1])
+    // each segment split into pieces of at most 1 mm so the arc correction follows it smoothly
+    function pieces(a, b) = max(1, ceil(norm(b - a)));
+    for (p = cam_paths) for (i = [0:len(p)-2]) let(n = pieces(p[i], p[i+1])) for (k = [0:n-1])
       capsule2d(cam2h(p[i] + (p[i+1]-p[i])*k/n), cam2h(p[i] + (p[i+1]-p[i])*(k+1)/n), r_eff);
     // mouth channel from the plate front, with a lead-in funnel
     capsule2d([-5, cam2h([0,0])[1]], cam2h([0,0]), r_eff);
@@ -936,6 +976,7 @@ else if (part == "cam_paths") {
   // machine-readable dump for the latch simulator
   echo(str("CAM r_eff=", r_eff, " pin_r=", pin_d/2, " u_stop=", u_stop, " U=", U, " u_a=", u_a));
   echo(str("ARM r=", arm_r, " rest=", cam_rest_v));
+  echo(str("BEND tightest pin-path radius inside a path: ", cam_min_r, " mm (r_eff ", r_eff, "; path ends excluded: those are the cusps)"));
   for (p = cam_paths) echo(str("PATH ", p));
   cube(1);
 }
