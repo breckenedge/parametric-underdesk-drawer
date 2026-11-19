@@ -28,6 +28,10 @@
 part = "assembly"; // [assembly, print_layout, housing, drawer, arm, cam_2d, cam_paths]
 // Show drawer pulled out this far in the assembly view (mm)
 assembly_open = 0;
+// Debug: engrave each part with the git commit it came from and its part number
+// (1 = housing, 2 = drawer, 3 = arm), e.g. "2e161e2-2". A "+" after the hash means the
+// file had uncommitted changes. The hash comes from version.scad (see README).
+debug_stamp = false;
 
 /* [Drawer interior (mm)] */
 // Minimums are the smallest sizes that work with defaults for everything else:
@@ -122,6 +126,11 @@ mech_slope_min = 10; // [0:1:300]
 // drawer's side wall, so a short band works on any size of drawer.
 // Flat (unstretched) length of the bands you'll use on the side hooks, mm (2.5" = 64)
 side_band_len = 64;
+// Deep drawers with side bands: side_band_len bands stop the drawer ~140 mm out, short of the back
+// of a deep compartment. When on, the hooks move up to the front of the latch pocket and the posts
+// forward, so the drawer opens until the pocket is just inside the housing. That takes longer bands
+// (the console gives the length).
+side_band_deep = true;
 // How far the ejector pushes: the band is stretched this much as the drawer closes
 band_stroke = 32;
 post_d = 6;
@@ -136,6 +145,10 @@ window_rib = 8;
 window_target = 40;
 
 /* [Hidden] */
+// version.scad (not committed) holds git_sha; tools/write_version.sh writes it, and the git hooks
+// in tools/githooks rerun that on every commit, checkout and merge. -D git_sha="..." overrides it.
+include <version.scad>
+stamp_sha = is_undef(git_sha) ? "nogit" : git_sha;
 $fn = $preview ? 32 : 64;
 eps = 0.01;
 s2 = sqrt(2);
@@ -319,15 +332,28 @@ sh_lt = 1.6;     // lip thickness
 z_sht = z_band - 4.5 - 1.5 - sh_lip;            // arm top: lip top 1.5 under the post
 z_sh = z_sht - sh_ht/2;                         // band height on the hook
 y_sh = y_wo + sh_len - sh_lt - 1;               // band sits against the lip
-x_sh = Dd - back_r - sh_w/2 - 2;                // on the flat of the side wall, near the back
+x_sh_back = Dd - back_r - sh_w/2 - 2;           // on the flat of the side wall, near the back
 sh_off = norm([y_post - y_sh, z_band - z_sh]);  // band's sideways + vertical offset, post to hook
 sh_wrap = PI*post_d/2 + sh_w + sh_ht;           // band length wrapped around post and hook
-// post-to-hook distance (along the drawer) at which the band goes slack; closed it is band_stroke more
-sh_slack = sqrt(max(0, pow(side_band_len - sh_wrap/2, 2) - sh_off*sh_off));
+// post-to-hook distance (along the drawer) at which a band of flat length L goes slack; closed it is
+// band_stroke more. Opening the drawer, the hook passes under the post and the band catches it again
+// (the soft stop) at 2*slack + band_stroke, wherever the hook and post are.
+function sh_slack_of(L) = sqrt(max(0, pow(L - sh_wrap/2, 2) - sh_off*sh_off));
+// Deep drawers: side_band_len bands would stop the drawer well short of the back of the
+// compartment. Instead the hook lines up with the front of the latch pocket, and the band is
+// sized (rounded down to a 1/2" length) so the stop comes just before the pocket leaves the
+// housing; the post moves forward to suit.
+sh_deep_margin = 5;                             // pocket front still this far inside at the stop
+sh_band_deep = floor((norm([(pocket_x0 - sh_deep_margin - band_stroke)/2, sh_off]) + sh_wrap/2) / 12.7) * 12.7;
+sh_deep = side_band_deep && sh_band_deep >= side_band_len + 12;
+sh_band = sh_deep ? sh_band_deep : side_band_len;   // flat length of the side bands to use
+x_sh = sh_deep ? pocket_x0 : x_sh_back;
+sh_slack = sh_slack_of(sh_band);
 x_spost = x_sh - sh_slack - band_stroke;        // housing post for the side bands
-sh_stretch = (2*norm([sh_slack + band_stroke, sh_off]) + sh_wrap) / (2*side_band_len);
-// smallest drawer the side hooks fit: post (with its flare) inside the housing, hook above the floor
-sh_min_d = ceil(post_d/2 + 1.5 + 1 + sh_slack + band_stroke + back_r + sh_w/2 + 2 - 2*wall);
+sh_stretch = (2*norm([sh_slack + band_stroke, sh_off]) + sh_wrap) / (2*sh_band);
+// smallest drawer the side hooks fit (side_band_len bands, hook at the back): post (with its flare)
+// inside the housing, hook above the floor
+sh_min_d = ceil(post_d/2 + 1.5 + 1 + sh_slack_of(side_band_len) + band_stroke + back_r + sh_w/2 + 2 - 2*wall);
 sh_min_h = ceil(z_rim - (z_sht - sh_ht) - floor_t);
 sides_fit = in_d >= sh_min_d && in_h >= sh_min_h && side_band_len - sh_wrap/2 > sh_off + 10;
 sides_want = back_band_len > 1.5 * side_band_len;
@@ -352,11 +378,18 @@ if (mech_slope) echo(str("Latch mechanism on a raised floor (45° wedge undernea
 echo(str("Desk screws: ",2*screw_n_side, " (", screw_n_side, " per side, ",
          round((Dh - 24)/(screw_n_side - 1)), " mm apart)"));
 if (ej_sides)
-  echo(str("Ejector: side bands – 2 bands of ", side_band_len, " mm flat length, one per side, each looped",
+  echo(str("Ejector: side bands – 2 bands of ", round(sh_band), " mm",
+           sh_deep ? str(" (", sh_band/25.4, "\")") : "", " flat length, one per side, each looped",
            " around the post under the housing and the hook on the drawer's side (a back band would need ~",
            back_band_len, " mm). Closed they are stretched ", round(sh_stretch*100)/100, "x. Opened more than ~",
            round(2*sh_slack + band_stroke), " mm they start pulling the drawer back in (a soft stop) – slip them",
            " off the hooks to take the drawer out"));
+if (ej_sides && sh_deep)
+  echo(str("Deep drawer: hooks moved up to the front of the latch pocket and the posts forward, with ",
+           round(sh_band), " mm bands instead of ", side_band_len, " mm, so the drawer opens until the pocket front is ~",
+           round(pocket_x0 - 2*sh_slack - band_stroke), " mm inside the housing (side_band_deep = false",
+           " keeps ", side_band_len, " mm bands; they stop it ~", round(2*sh_slack_of(side_band_len) + band_stroke),
+           " mm out)"));
 if (ej_sides && Dd - 2*(sh_slack + band_stroke) < 15)
   echo(str("WARNING: the side bands only start catching the drawer ~", round(2*sh_slack + band_stroke),
            " mm out, and a strong band can carry it ~", round(2*(sh_slack + band_stroke)),
@@ -405,6 +438,17 @@ assert(groove_y1 + 1 + screw_head_d/2 < screw_y && groove_y0 - 1 - screw_head_d/
        "latch groove runs into a screw row – move latch_y toward the centre");
 
 // ============================================================= modules
+// ---- debug stamp: "<commit>-<part number>" engraved stamp_d deep. stamp_cut() is a cutting body
+// with the text's face at z = 0, reading along +x, centred, sized to fit L long and at most H tall.
+stamp_d = 0.5;
+function stamp_label(n) = str(stamp_sha, "-", n);
+module stamp_cut(n, L, H) {
+  s = stamp_label(n);
+  translate([0, 0, -stamp_d]) linear_extrude(stamp_d + 1)
+    text(s, size = min(H, L / (0.76*len(s))), font = "Liberation Sans:style=Bold",
+         halign = "center", valign = "center");
+}
+
 module capsule2d(a, b, r) { hull() { translate(a) circle(r); translate(b) circle(r); } }
 
 module cam_2d(r = r_eff) {
@@ -468,6 +512,11 @@ module window_band(y0, y1) {
         linear_extrude(plate_t + 2) offset(r = 3) offset(delta = -3) square([cw, ch]);
 }
 
+hb_lim = screw_y - screw_cs_r - 1;              // inside the countersinks
+hb_fy = cam2h([0, 0])[1];                       // mouth funnel centre line
+hb_seg = (hb_fy - 5.5 + hb_lim) >= (hb_lim - hb_fy - 5.5) ? [-hb_lim, hb_fy - 5.5] : [hb_fy + 5.5, hb_lim];
+hb_stamp_L = hb_seg[1] - hb_seg[0] - 2;
+hb_stamp_y = (hb_seg[0] + hb_seg[1]) / 2;
 module housing() {
   difference() {
     union() {
@@ -480,6 +529,14 @@ module housing() {
     groove_cut();
     screw_holes();
     if (plate_windows) plate_windows();
+    // left outer face, reading from outside (back to front), mid-height
+    if (debug_stamp) translate([Dh/2, y_ho, z_hbot/2]) multmatrix([[-1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]])
+      stamp_cut(1, Dh - 16, min(5, -z_hbot - 4));
+    // and on the plate's underside along the solid front strip (x < 10, in front of the screws'
+    // countersinks and the windows), on the wider side of the groove's mouth funnel
+    // (left off when it would be under 2.4 mm tall: narrow drawers)
+    if (debug_stamp && hb_stamp_L / (0.76*len(stamp_label(1))) >= 2.4)
+      translate([7, hb_stamp_y, -plate_t]) rotate([0, 0, 90]) rotate([180, 0, 0]) stamp_cut(1, hb_stamp_L, 4.5);
   }
 }
 
@@ -507,6 +564,9 @@ module latch_arm() {
     }
     // hub bore over the pivot post
     translate([0, 0, -1]) cylinder(d = arm_post_d + 2*arm_clr, h = arm_h + 2);
+    // top face, between the hub bore and the pin
+    if (debug_stamp) let(x0 = arm_post_d/2 + arm_clr + 1, x1 = arm_r - pin_d/2 - 0.8 - 1)
+      translate([(x0 + x1)/2, 0, arm_h]) stamp_cut(3, x1 - x0, min(3.5, arm_w - 3));
   }
   translate([arm_r, 0, arm_h - eps]) {
     cylinder(d = pin_d, h = pin_h + eps);
@@ -631,6 +691,8 @@ module drawer() {
         cube([panel_t + eps, 2*(y_ho + panel_margin), -panel_top_gap - z_bot]);
     }
     translate([0, 0, z_bot + floor_t]) back_rounded_box(wall, Dd - 2*wall, Wd - 2*wall, Hd, r_in);
+    // underside (the bed face), reading from below
+    if (debug_stamp) translate([Dd/2, 0, z_bot]) rotate([180, 0, 0]) stamp_cut(2, Dd - 16, min(6, Wd/4));
   }
   latch_drawer_parts();
   dividers();
@@ -675,6 +737,8 @@ module print_layout() {
 }
 
 // ============================================================= output
+if (debug_stamp) echo(str("Debug stamp: housing ", stamp_label(1), ", drawer ", stamp_label(2), ", arm ", stamp_label(3),
+  stamp_sha == "nogit" ? " – WARNING: no version.scad, run tools/write_version.sh (see README)" : ""));
 // F6 (full render) of the assembly gives the print layout; F5 preview shows it assembled.
 if (part == "print_layout" || (part == "assembly" && !$preview)) print_layout();
 else if (part == "assembly") {
