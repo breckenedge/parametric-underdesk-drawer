@@ -14,8 +14,10 @@
 //            arm carrying the pin swings sideways on a post in a pocket at the
 //            drawer's back centre; a rubber band stretched past both sides of it
 //            (spreader in front, post behind) pulls it back to centre. No printed part flexes.
-//  Ejector : one rubber band stretched between two posts under the
+//  Ejector : small drawers: one rubber band stretched between two posts under the
 //            housing walls; the drawer's back wall pushes it back on close.
+//            Wide ones: a short band per side, from a post under the housing to a
+//            hook on the drawer's side wall (picked automatically).
 //
 //  Hardware: countersunk wood screws (default #8 / 4 mm; 4 on small drawers, more
 //            on long ones – see screw_spacing), two rubber bands.
@@ -71,7 +73,11 @@ screw = 4; // [3.5:#6 / 3.5 mm, 4:#8 / 4 mm, 4.5:#9 / 4.5 mm, 5:#10 / 5 mm]
 screw_spacing = 100; // [40:5:200]
 
 /* [Push latch] */
-// Lateral position of the heart cam's centre (0 = centred on the drawer)
+// Where the latch track (in the housing) and its mechanism (in the drawer) go, seen from the
+// front. left / right put them as close to that side as fits (clear of the side wall, the
+// screws and the rounded back corner), leaving one big open area in the drawer.
+latch_side = "center"; // [center, left, right]
+// Extra sideways shift of the latch, mm (+ = toward the left). Added to the centre or side position.
 latch_y = 0;
 pin_d = 3;
 // Radial clearance between pin and groove
@@ -109,7 +115,14 @@ cpost_d = 4;
 mech_slope_min = 10; // [0:1:300]
 
 /* [Rubber band ejector] */
-// Band is pushed this far back when the drawer is closed
+// Picked automatically (the console says which and why). Small drawers: one band across the
+// back of the drawer, which gets longer as the drawer gets wider. Once that band would need a
+// flat length over 1.5 x side_band_len, and the drawer is deep and tall enough for the hooks:
+// one band per side instead, looped around a post under the housing and a hook on the
+// drawer's side wall, so a short band works on any size of drawer.
+// Flat (unstretched) length of the bands you'll use on the side hooks, mm (2.5" = 64)
+side_band_len = 64;
+// How far the ejector pushes: the band is stretched this much as the drawer closes
 band_stroke = 32;
 post_d = 6;
 // Band height below the housing bottom
@@ -180,14 +193,22 @@ u_D  = u_C + (v_rc - v_tr);
 U    = u_D + 2.5;                 // groove end
 u_drop = 1.5;                     // P2 falls straight this far before turning toward the notch
 u_a  = u_D - 4.6 - u_drop;        // latch notch (apex)
-u_4a = u_a - 2.5;
+// Exit S-curve (P4): after release the pin has to cross from the stroke-2 column over to the left
+// channel against the centring band, so the groove's wall is what pushes it. A sharp 45° corner
+// there makes the drawer stutter; this cosine curve has no corners and its steepest point is
+// about 35° off straight, so the pin gets pushed across gradually.
+p4_e = 2.3;  p4_len = 16;
+u_4e = abs(v_l) + p4_e;                       // reaches the left channel here...
+u_4s = u_4e + p4_len;                          // ...having started to turn here
+p4_curve = [for (i = [0:16]) let(t = i/16)
+  [u_4s - p4_len*t, v_le - (v_le - v_l)*(0.5 - 0.5*cos(180*t))]];
 u_stop = U - stop_back;           // pin position when panel hits housing
 
 // Bounce margin: on the way out after push 1 the band pulls the pin toward the exit side,
 // and with momentum (arm swing, drawer bounce, pivot play – worse when the drawer isn't
 // level and nothing damps the arm) it can cut over to the exit. P2 drops straight first so
 // it reaches the exit diagonal (P3) low, and P3 climbs to above u_D: the drawer would have
-// to move back in ~1.6 mm mid-return to skip the catch (tools/cammargin.ps1; was 0.66).
+// to move back in ~1.8 mm mid-return to skip the catch (tools/cammargin.ps1; was 0.66).
 cam_paths = [
   // P1: entry straight, ramp, right channel, over to stroke-1 end
   [[0,0],[u_1,0],[u_2,v_rc],[u_C,v_rc],[u_D,v_tr],[U,v_tr]],
@@ -195,9 +216,14 @@ cam_paths = [
   [[u_D,v_tr],[u_D-u_drop,v_tr],[u_a+0.6,v_n],[u_a,v_n]],
   // P3: notch straight up (from latched, a 4 mm push still re-latches; ~5 mm releases), then forced left to stroke-2 end
   [[u_a,v_n],[u_a+2.8,v_n],[u_D+0.5,v_le],[U,v_le]],
-  // P4: exit around the left of the island back to the mouth
-  [[U,v_le],[u_4a,v_le],[u_4a-(v_le-v_l),v_l],[abs(v_l),v_l],[0,0]]
+  // P4: exit around the left of the island back to the mouth, on a smooth S-curve
+  concat([[U,v_le]], p4_curve, [[abs(v_l),v_l],[0,0]])
 ];
+
+// the exit curve must leave a solid wall (cam_g centre to centre) to the entry, ramp and notch paths
+function seg_dist(p, a, b) = let(d = b - a, t = max(0, min(1, (p - a)*d / max(1e-9, d*d)))) norm(a + d*t - p);
+p4_gap = min([for (q = p4_curve, k = [0, 1]) let(P = cam_paths[k]) for (i = [0:len(P)-2]) seg_dist(q, P[i], P[i+1])]);
+assert(p4_gap >= cam_g - 0.05, str("exit curve runs within ", p4_gap, " mm of another groove path (needs ", cam_g, ")"));
 
 // The centring band holds the arm (and pin) at v = cam_rest_v. Simulation shows
 // the latch cycles correctly for rest positions from v = -0.25 to +2 (tools/camsim_rest_offset.ps1),
@@ -207,15 +233,29 @@ cam_rest_v = 1.0;
 // arm / pin placement (drawer coords; equal to housing coords when closed)
 throw_r = v_rc - cam_rest_v + pin_clr;          // max pin travel from rest, each way
 throw_l = abs(v_l) + cam_rest_v + pin_clr;
-// Place the arm so the groove's lateral extent (v_l..v_rc) is centred on latch_y
-yb = latch_y - ((v_l + v_rc)/2 - cam_rest_v);   // y of the arm's centre line (pin at rest)
+spool_fl = 1;                                   // band post flare (radius added)
+// Place the arm so the groove's lateral extent (v_l..v_rc) is centred, or as far to one side
+// as fits, then shift by latch_y. +y is the drawer's left, seen from the front.
+yb_c = -((v_l + v_rc)/2 - cam_rest_v);          // arm centre line for a centred groove
+// how far each part reaches from the arm's centre line toward +y (hi) and -y (lo)
+lat_pocket_hi = throw_r + arm_w/2 + 2.5 + 1.2;   lat_pocket_lo = throw_l + arm_w/2 + 2.5 + 1.2;
+lat_groove_hi = v_rc - cam_rest_v + r_eff;       lat_groove_lo = cam_rest_v - v_l + r_eff;
+lat_post = cpost_d/2 + spool_fl + 0.5;          // back band post vs the rounded back corner
+lat_screw_y = y_li - (screw_head_d/2 + screw_recess) - 1;   // same as screw_y (defined below)
+// furthest the arm's centre line may go each way: 0.5 mm inside every check further down
+// (side wall, screw rows, rounded back corner)
+yb_hi =  min(Wd/2 - wall - 5 - lat_pocket_hi, lat_screw_y - 1 - screw_head_d/2 - lat_groove_hi,
+             Wd/2 - back_r - lat_post) - 0.5;
+yb_lo = -min(Wd/2 - wall - 5 - lat_pocket_lo, lat_screw_y - 1 - screw_head_d/2 - lat_groove_lo,
+             Wd/2 - back_r - lat_post) + 0.5;
+yb = latch_y + (latch_side == "left"  ? max(yb_hi, yb_c) :
+                latch_side == "right" ? min(yb_lo, yb_c) : yb_c);   // arm centre line (pin at rest)
 x_bpost = Dd - wall - 2 - cpost_d/2;            // 2 mm behind it for the band to wrap
 x_tip = x_bpost - cband_back;                   // arm tip end (rounded, radius arm_w/2)
 x_pin = x_tip - arm_w/2;                        // pin sits at the centre of the rounded tip
 x_pv  = x_pin - arm_r;                          // pivot post
 hub_d = arm_post_d + 2*arm_clr + 2*2.4;
 a_tip = arm_r + arm_w/2;                        // pivot to tip end
-spool_fl = 1;                                   // band post flare (radius added)
 x_sp  = x_pv - hub_d/2 - 1 - cpost_d/2 - spool_fl;   // spreader, just clear of the hub
 phi_l = asin(min(1, throw_l / arm_r));          // arm swing each way (deg)
 phi_r = asin(min(1, throw_r / arm_r));
@@ -231,6 +271,10 @@ groove_y1 = yb - cam_rest_v + v_rc + r_eff;
 pocket_y0 = yb - throw_l - arm_w/2 - 2.5 - 1.2;
 pocket_y1 = yb + throw_r + arm_w/2 + 2.5 + 1.2;
 pocket_x0 = x_sp - cpost_d/2 - spool_fl - 1.5 - 1.2;
+// what the pocket actually encloses: a gap to a side wall too narrow to use (< 12 mm) is
+// closed off by running the pocket out to that wall
+pocket_y0w = pocket_y0 - (-Wd/2 + wall) < 12 ? -Wd/2 + wall - eps : pocket_y0;
+pocket_y1w = Wd/2 - wall - pocket_y1 < 12 ?  Wd/2 - wall + eps : pocket_y1;
 
 // arm heights (world z, use orientation)
 z_arm = z_rim - arm_h;                          // arm bottom; its top is flush with the rim
@@ -247,10 +291,47 @@ function band_y(x) = cband_spread/2 + (cpost_d/2 - cband_spread/2) * (x - x_sp) 
 cband_len = norm([x_bpost - x_sp, cband_spread/2 - cpost_d/2]);
 cband_loop = 2*cband_len + PI*cpost_d + (cband_spread - cpost_d);
 
-// band posts
-x_post = Dd - band_stroke + post_d/2;
+// band posts. The back band is fed through two loops on the drawer's back, so it stays with the
+// drawer: pulled past the posts it stretches the other way and pulls the drawer back. A band
+// released from closed swings the drawer out to about 2 x the stroke at most (it gives back what
+// it stored), so the stroke is cut on short drawers to keep 15 mm of the drawer in the housing.
+bb_stroke = min(band_stroke, floor((Dd - 15)/2));
+x_post = Dd - bb_stroke + post_d/2;
 y_post = y_ho - post_d/2;
 z_band = z_hbot - band_drop;
+back_band_len = round(0.9 * 2*y_post);          // flat length of a back band
+bl_w = 6;                                       // back band loops: width along the back
+y_bl = Wd/2 - back_r - bl_w/2 - 1;              // on the flat of the back wall, near the corners
+bl_r = 3;                                       // radius of the band's tunnel (6 mm tall, 3 deep)
+// how far the drawer opens before the back band is stretched 2.5x (a firm pull)
+bl_half = (2.5*back_band_len - 2*y_bl) / 2;
+bb_open25 = bb_stroke + sqrt(max(0, bl_half*bl_half - pow(y_post - y_bl, 2)));
+
+// side-hook ejector: the same posts under the housing walls, further forward, and a hook on
+// each side wall of the drawer near its back: an arm sticking straight out of the wall with a
+// lip at its end, like a coat hook. The band loops over the arm. The hook sits low enough to
+// pass under the post when the drawer goes in or out (posts and hooks overlap sideways).
+sh_w = 5;        // arm width (along the drawer)
+sh_len = 6;      // arm length out from the wall
+sh_ht = 3.5;     // arm height at its end (it gets taller toward the wall: 45° underside)
+sh_lip = 2.5;    // lip height above the arm
+sh_lt = 1.6;     // lip thickness
+z_sht = z_band - 4.5 - 1.5 - sh_lip;            // arm top: lip top 1.5 under the post
+z_sh = z_sht - sh_ht/2;                         // band height on the hook
+y_sh = y_wo + sh_len - sh_lt - 1;               // band sits against the lip
+x_sh = Dd - back_r - sh_w/2 - 2;                // on the flat of the side wall, near the back
+sh_off = norm([y_post - y_sh, z_band - z_sh]);  // band's sideways + vertical offset, post to hook
+sh_wrap = PI*post_d/2 + sh_w + sh_ht;           // band length wrapped around post and hook
+// post-to-hook distance (along the drawer) at which the band goes slack; closed it is band_stroke more
+sh_slack = sqrt(max(0, pow(side_band_len - sh_wrap/2, 2) - sh_off*sh_off));
+x_spost = x_sh - sh_slack - band_stroke;        // housing post for the side bands
+sh_stretch = (2*norm([sh_slack + band_stroke, sh_off]) + sh_wrap) / (2*side_band_len);
+// smallest drawer the side hooks fit: post (with its flare) inside the housing, hook above the floor
+sh_min_d = ceil(post_d/2 + 1.5 + 1 + sh_slack + band_stroke + back_r + sh_w/2 + 2 - 2*wall);
+sh_min_h = ceil(z_rim - (z_sht - sh_ht) - floor_t);
+sides_fit = in_d >= sh_min_d && in_h >= sh_min_h && side_band_len - sh_wrap/2 > sh_off + 10;
+sides_want = back_band_len > 1.5 * side_band_len;
+ej_sides = sides_want && sides_fit;
 
 // Screws go in straight up from below with the drawer out, so the whole countersink
 // (and the head/driver passing through it) must sit inside the ledges' inner edge.
@@ -263,12 +344,39 @@ screw_xs = [for (i = [0:screw_n_side-1]) 12 + i * (Dh - 24) / (screw_n_side - 1)
 echo(str("Drawer body ", Wd, " x ", Dd, " x ", Hd, " mm; housing ", 2*y_ho, " x ", Dh,
          " x ", -z_hbot, " mm (+ band posts)"));
 echo(str("Latched drawer sits ", u_stop - u_a, " mm proud; push-release travel the same"));
+echo(str("Latch on the ", latch_side == "center" ? "centre line" : str(latch_side, " side"),
+         ", room beside its pocket at the back: ", max(0, round(Wd/2 - wall - pocket_y1w)), " mm on the left, ",
+         max(0, round(pocket_y0w + Wd/2 - wall)), " mm on the right"));
 if (mech_slope) echo(str("Latch mechanism on a raised floor (45° wedge underneath): ", round(mech_gap),
                           " mm free under its front edge"));
 echo(str("Desk screws: ",2*screw_n_side, " (", screw_n_side, " per side, ",
          round((Dh - 24)/(screw_n_side - 1)), " mm apart)"));
-echo(str("Ejector band: post spacing ", 2*y_post, " mm -> use a band with flat length ~",
-         round(0.9 * 2*y_post), " mm (or a chain of bands), looped around both posts"));
+if (ej_sides)
+  echo(str("Ejector: side bands – 2 bands of ", side_band_len, " mm flat length, one per side, each looped",
+           " around the post under the housing and the hook on the drawer's side (a back band would need ~",
+           back_band_len, " mm). Closed they are stretched ", round(sh_stretch*100)/100, "x. Opened more than ~",
+           round(2*sh_slack + band_stroke), " mm they start pulling the drawer back in (a soft stop) – slip them",
+           " off the hooks to take the drawer out"));
+if (ej_sides && Dd - 2*(sh_slack + band_stroke) < 15)
+  echo(str("WARNING: the side bands only start catching the drawer ~", round(2*sh_slack + band_stroke),
+           " mm out, and a strong band can carry it ~", round(2*(sh_slack + band_stroke)),
+           " mm before they stop it – more than this ", Dd, " mm drawer, so it can still be thrown out"));
+if (!ej_sides) {
+  echo(str("Ejector band: post spacing ", 2*y_post, " mm -> use a band with flat length ~",
+           back_band_len, " mm (or a chain of bands). Feed it through the two loops on the drawer's back,",
+           " then loop it around both posts. It also stops the drawer: released, the drawer settles about ",
+           bb_stroke, " mm open, and even a strong band can't throw it out further than about ", 2*bb_stroke,
+           " mm (of ", Dd, ")", bb_open25 < Dd - 15 ? str("; pulled out more than ~", round(bb_open25),
+           " mm the band is stretched 2.5x") : ""));
+  if (bb_stroke < band_stroke)
+    echo(str("Ejector stroke cut to ", bb_stroke, " mm (band_stroke ", band_stroke,
+             ") so the band can catch this short drawer"));
+  if (sides_want)
+    echo(side_band_len - sh_wrap/2 > sh_off + 10
+         ? str("Side-hook ejector (", side_band_len, " mm bands) not used: it needs inner_d >= ", sh_min_d,
+               " and inner_h >= ", sh_min_h)
+         : str("Side-hook ejector not used: side_band_len ", side_band_len, " mm is too short for it"));
+}
 echo(str("Latch centring band: loop path ", round(cband_loop), " mm -> use a band of ~",
          round(cband_loop/1.5), " mm circumference (flat length ~", round(cband_loop/3),
          " mm), or a smaller one doubled"));
@@ -277,11 +385,11 @@ assert(throw_r < arm_r - 8, "arm_r too short for the cam's sideways travel");
 assert(x_bpost - cpost_d/2 - spool_fl - x_tip >= 1.5, "cband_back too short – band post hits the arm tip");
 assert(band_y(x_pv) >= hub_d/2 + 0.4, "latch band strands rub the arm's hub – increase cband_spread");
 assert(band_y(x_pin) <= arm_w/2 - 0.4, "latch band strands don't press on the arm tip – reduce cband_spread or widen arm_w");
-assert(z_bot < z_band - 3, "Drawer too shallow to push the ejector band – increase inner_h");
+assert(ej_sides || z_bot < z_band - 3, "Drawer too shallow to push the ejector band – increase inner_h");
 assert(pocket_x0 > wall + 5, "inner_d too small for the latch pocket");
 assert(x_cam0 > 8, "inner_d too small for the latch groove");
 assert(x_cam0 + U + r_eff < Dh, "cam does not fit");
-assert(x_post > 15, "inner_d too small for band_stroke");
+assert(ej_sides || x_post > 15, "inner_d too small for band_stroke");
 assert(back_r >= wall + 0.5, "back_r must be at least wall + 0.5");
 // the inner corner fill sits within back_r - wall of the back and side walls: keep it
 // behind the arm's tip and clear of the back band post
@@ -290,6 +398,8 @@ assert(Dd - wall - (back_r - wall) > x_tip + 0.5 &&
        "back_r too large – the rounded back corners reach the latch arm or its band post");
 assert(pocket_y1 < Wd/2 - wall - 5 && pocket_y0 > -Wd/2 + wall + 5,
        "latch pocket hits a side wall – inner_w too small or latch_y too far off-centre");
+assert(latch_side == "center" || latch_side == "left" || latch_side == "right",
+       "latch_side must be center, left or right");
 assert(screw_y + screw_cs_r < y_li, "screw countersink overlaps the slide ledge");
 assert(groove_y1 + 1 + screw_head_d/2 < screw_y && groove_y0 - 1 - screw_head_d/2 > -screw_y,
        "latch groove runs into a screw row – move latch_y toward the centre");
@@ -309,8 +419,8 @@ module rail_profile() {   // right side, (y, z)
   ]);
 }
 
-module band_post() {
-  translate([x_post, y_post, 0]) {
+module band_post(x) {
+  translate([x, y_post, 0]) {
     translate([0,0,z_band - 1.5]) cylinder(d = post_d, h = z_hbot - z_band + 1.5 + eps);
     // 45° flare that keeps the band on (prints fine upside down)
     translate([0,0,z_band - 3]) cylinder(d1 = post_d + 3, d2 = post_d, h = 1.5);
@@ -364,7 +474,7 @@ module housing() {
       translate([0, -y_ho, -plate_t]) cube([Dh, 2*y_ho, plate_t]);
       for (m = [0,1]) mirror([0, m, 0]) {
         rotate([90,0,90]) linear_extrude(Dh) rail_profile();
-        band_post();
+        band_post(ej_sides ? x_spost : x_post);
       }
     }
     groove_cut();
@@ -406,8 +516,9 @@ module latch_arm() {
 
 module latch_pocket() {   // U-shaped guard: front partition + two side walls to the back wall
   pt = 1.2;
-  translate([pocket_x0, pocket_y0, z_bot]) cube([pt, pocket_y1 - pocket_y0, Hd]);
-  for (y = [pocket_y0, pocket_y1 - pt])
+  translate([pocket_x0, pocket_y0w, z_bot]) cube([pt, pocket_y1w - pocket_y0w, Hd]);
+  // a guard wall only on sides that aren't closed off to the drawer's side wall (that wall guards instead)
+  for (y = [if (pocket_y0w == pocket_y0) pocket_y0, if (pocket_y1w == pocket_y1) pocket_y1 - pt])
     translate([pocket_x0, y, z_bot]) cube([Dd - wall - pocket_x0 + eps, pt, Hd]);
 }
 
@@ -444,7 +555,7 @@ module latch_band_posts() {
 module mech_floor() {   // flat-topped wedge under the mechanism, cut off where it meets the drawer floor
   x0 = pocket_x0;  x1 = Dd - wall + eps;
   intersection() {
-    translate([x0, pocket_y0, z_bot]) cube([x1 - x0, pocket_y1 - pocket_y0, z_mf - z_bot]);
+    translate([x0, pocket_y0w, z_bot]) cube([x1 - x0, pocket_y1w - pocket_y0w, z_mf - z_bot]);
     rotate([90, 0, 0]) linear_extrude(4*Wd, center = true)
       polygon([[x0, mf_under(x0)], [x1, mf_under(x1)], [x1, z_mf], [x0, z_mf]]);
   }
@@ -465,10 +576,38 @@ module latch_drawer_parts() {
   }
 }
 
+// side-hook ejector: an arm sticking straight out of the drawer's +y side wall with a lip at its
+// end. Its underside rises 45° from the wall, so it prints without support; edges the band wraps
+// are chamfered. Mirrored for the other side.
+module side_hook() {
+  c = 1.2;
+  // thin slice of the hook at y (0.3 thick), spanning z0..z1, chamfered corners
+  module slice(y, z0, z1) {
+    x0 = x_sh - sh_w/2;  x1 = x_sh + sh_w/2;
+    translate([0, y + 0.3, 0]) rotate([90, 0, 0]) linear_extrude(0.3)
+      polygon([[x0, z0 + c], [x0 + c, z0], [x1 - c, z0], [x1, z0 + c],
+               [x1, z1 - c], [x1 - c, z1], [x0 + c, z1], [x0, z1 - c]]);
+  }
+  y_end = y_wo + sh_len;
+  intersection() {
+    union() {
+      hull() {   // arm
+        slice(y_wo - 0.5, z_sht - sh_ht - (sh_len + 0.2), z_sht);
+        slice(y_end - 0.3, z_sht - sh_ht, z_sht);
+      }
+      hull() {   // lip
+        slice(y_end - sh_lt, z_sht - sh_ht, z_sht + sh_lip);
+        slice(y_end - 0.3, z_sht - sh_ht, z_sht + sh_lip);
+      }
+    }
+    translate([x_sh - sh_w, 0, z_bot]) cube([2*sh_w, Wd, -z_bot]);   // nothing below the floor
+  }
+}
+
 module dividers() {
   if (dividers > 0) for (i = [1:dividers]) {
     y = -Wd/2 + wall + i * in_w / (dividers + 1);
-    x1 = (y > pocket_y0 - 1 && y < pocket_y1 + 1) ? pocket_x0 : Dd - wall;
+    x1 = (y > pocket_y0w - 1 && y < pocket_y1w + 1) ? pocket_x0 : Dd - wall;
     translate([wall - eps, y - 0.6, z_bot]) cube([x1 - wall + 2*eps, 1.2, Hd - 5]);
   }
 }
@@ -495,6 +634,34 @@ module drawer() {
   }
   latch_drawer_parts();
   dividers();
+  if (ej_sides) for (m = [0,1]) mirror([0, m, 0]) side_hook();
+  else for (m = [0,1]) mirror([0, m, 0]) back_loop();
+}
+
+// back band loop: a tunnel on the back wall that the band is fed through, so it stays with the
+// drawer. A rounded C against the wall; where a curve would overhang it runs at 45° instead
+// (the underside into the wall, the tunnel's roof up to a short flat), so it prints without support.
+module back_loop() {
+  ri = bl_r;  ro = bl_r + 1.4;  s = sqrt(2);
+  zc = max(z_band, z_bot + ri + 1.6);   // raised on short drawers so the bottom of the C stays whole
+  intersection() {
+    translate([0, y_bl + bl_w/2, 0]) rotate([90, 0, 0]) linear_extrude(bl_w)
+      difference() {
+        // rounded outside, flat against the wall; the underside runs into the wall at 45°
+        intersection() {
+          hull() { translate([Dd, zc]) circle(ro); translate([Dd, zc - ro*s]) square(0.01, center = true); }
+          translate([Dd - 0.5, zc - 2*ro]) square([ro + 1, 4*ro]);
+        }
+        // rounded inside; the roof runs up at 45° and is cut flat at the arc's height (a ~1.2 mm
+        // bridge next to the wall), so it prints without support and the top stays 1.4 mm thick
+        intersection() {
+          hull() { translate([Dd, zc]) circle(ri); translate([Dd, zc + ri*s]) square(0.01, center = true);
+                   translate([Dd - 1, zc - ri]) square([0.01, ri*(1 + s)]); }
+          translate([Dd - 2, zc - ri - 1]) square([ri + 3, 2*ri + 1]);
+        }
+      }
+    translate([Dd - 2, -Wd/2, z_bot]) cube([ro + 3, Wd, -z_bot]);   // nothing below the floor
+  }
 }
 
 // ---- all parts in print orientation, side by side on the bed
@@ -522,9 +689,14 @@ else if (part == "assembly") {
       for (i = [0:1]) hull() for (p = [pts[i], pts[i+1]]) translate([p[0], p[1], z_tun]) sphere(d = 1, $fn = 8);
     }
   }
-  // ejector rubber band (shown relaxed)
+  // ejector rubber band(s): the back band shown relaxed, the side bands between post and hook
   color("Black") for (m=[0,1]) mirror([0,m,0])
-    translate([x_post - post_d/2 - 0.5, 0, z_band]) rotate([90,0,0]) cylinder(d = 1, h = y_post);
+    if (ej_sides) for (s = [-1,1])
+      hull() {
+        translate([x_spost, y_post + s*(post_d/2 + 0.5), z_band]) sphere(d = 1, $fn = 8);
+        translate([x_sh - assembly_open, y_sh, z_sh + s*(sh_ht/2 + 0.5)]) sphere(d = 1, $fn = 8);
+      }
+    else translate([x_post - post_d/2 - 0.5, 0, z_band]) rotate([90,0,0]) cylinder(d = 1, h = y_post);
 }
 else if (part == "housing") rotate([180,0,0]) housing();   // desk face down on the bed
 else if (part == "drawer")  translate([0,0,-z_bot]) drawer();
