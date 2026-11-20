@@ -392,7 +392,7 @@ bb_open25 = bb_stroke + sqrt(max(0, bl_half*bl_half - pow(y_post - y_bl, 2)));
 // pass under the post when the drawer goes in or out (posts and hooks overlap sideways).
 sh_w = 5;        // arm width (along the drawer)
 sh_len = 6;      // arm length out from the wall
-sh_ht = 3.5;     // arm height at its end (it gets taller toward the wall: 45° underside)
+sh_ht = 3.5;     // arm height (flat top and bottom)
 sh_lip = 2.5;    // lip height above the arm
 sh_lt = 1.6;     // lip thickness
 z_sht = z_band - 4.5 - 1.5 - sh_lip;            // arm top: lip top 1.5 under the post
@@ -721,8 +721,10 @@ module latch_drawer_parts() {
 }
 
 // side-hook ejector: an arm sticking straight out of the drawer's +y side wall with a lip at its
-// end. Its underside rises 45° from the wall, so it prints without support; edges the band wraps
-// are chamfered. Mirrored for the other side.
+// end. Its underside is flat, so the band has nothing to ride outward on (a sloped underside lets
+// the loop creep down the slope toward the tip and off). That face is a sh_len overhang, so the
+// hooks need a little support when printing. Edges the band wraps are chamfered. Mirrored for the
+// other side.
 module side_hook() {
   c = 1.2;
   // thin slice of the hook at y (0.3 thick), spanning z0..z1, chamfered corners
@@ -736,7 +738,7 @@ module side_hook() {
   intersection() {
     union() {
       hull() {   // arm
-        slice(y_wo - 0.5, z_sht - sh_ht - (sh_len + 0.2), z_sht);
+        slice(y_wo - 0.5, z_sht - sh_ht, z_sht);
         slice(y_end - 0.3, z_sht - sh_ht, z_sht);
       }
       hull() {   // lip
