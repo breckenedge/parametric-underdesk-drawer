@@ -1,2 +1,0 @@
-#!/bin/sh
-sh "$(git rev-parse --show-toplevel)/tools/write_version.sh"
