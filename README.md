@@ -2,6 +2,17 @@
 
 An OpenSCAD drawer that screws under a desk and prints with no supports. Push the front to latch it; push again and a rubber band pops it open.
 
+![The drawer pulled out of its housing](images/assembly-open.png)
+
+| closed | with a wood face (`wood_face`, `panel_t = 0`) |
+|---|---|
+| ![closed](images/assembly-closed.png) | ![wood face](images/wood-face.png) |
+
+The latch and kicker with the drawer latched, the housing shown as just its groove and posts:
+
+![latch mechanism](images/mechanism.png)
+
+
 `underdesk_drawer.scad`: open it in OpenSCAD (nightly, with the Manifold backend). Set the size in the Customizer, then pick `part`.
 
 `part = assembly` shows the drawer assembled in F5 preview; F6 renders all the parts laid out for printing (`print_layout` shows that layout in F5). The `assembly_open_pct` slider pulls the drawer out (100% leaves 15 mm in the housing). The pin stays in the groove on its way-out path, as after a release, and the latch arm swings to match.
@@ -15,45 +26,56 @@ An OpenSCAD drawer that screws under a desk and prints with no supports. Push th
 | `cassette` | tray on the bed | latch pocket, the arm's pivot post and tip support, latch band posts and kicker bays on one flat tray; its back wall is the kicker's nose |
 | `arm` | flat on the bed, pin up | rigid latch arm that carries the pin |
 
+| housing | drawer |
+|---|---|
+| ![housing](images/part-housing.png) | ![drawer](images/part-drawer.png) |
+| **cassette** | **arm** |
+| ![cassette](images/part-cassette.png) | ![arm](images/part-arm.png) |
+
+All four as `print_layout` sets them out:
+
+![print layout](images/print-layout.png)
+
+
 The Customizer only has the choices a builder makes: the drawer's size and walls, the wood face, the housing, the mounts, the bands and the fit clearances. Everything else (the latch, its arm, the catch, the slide) is a fixed number in the file's `[Hidden]` section, because those work together; `-D name=value` still overrides them.
 
 
 ## How it works
 - **Slide:** 45° lips on the drawer rest on 45° ledges in the housing. This works like a dovetail. It centres the drawer side to side, and both parts print with no overhang steeper than 45°. If the print comes out a little wider or narrower, the drawer just rides slightly higher or lower.
 - **Latch:** a push-push "heart cam" groove is cut into the housing plate. The pin that runs in it sits on a rigid arm in a pocket on the cassette, at the back centre of the drawer. The arm swings sideways on a post at its front end, so the cam can push it sideways without it tipping or jamming, and the push of the latch goes straight along the arm into the post. One rubber band is stretched lengthwise around a spreader in front of the arm's hub and a post behind its tip, with the arm sitting between its two strands. When the arm swings, its rounded tip pushes one strand out like a bowstring, and the band pulls it back to centre. At rest both strands press lightly on the tip, so there's no dead zone in the middle. No printed part has to flex. The pin moves on a slight arc, so the groove is drawn with that correction. The latch is centred, so it pulls straight and doesn't twist the drawer on the slide. The cycle is: push in → latch (the drawer sits about 7.5 mm proud) → push about 5 mm or more → release. On the way out after release, the groove steers the pin back across on a smooth S-curve (no corners, at most about 36° off straight) rather than a sharp 45° bend, so the drawer doesn't stutter there. Every other bend in the groove is rounded too, on arcs of 1.4–3 mm radius (the pin-centre path, as in the prior art below). The only sharp points left are where the groove's paths meet: the notch the pin rests in, the two stroke ends, and the mouth. Those points decide which way the pin goes, so they stay sharp. That swing stretches the latch band, so the curve does most of it early, while the ejector still pushes hard, and the last stretch to the groove's mouth lets the latch band push the drawer out instead.
-- **Cassette:** the whole latch mechanism and the kicker's bays on one printed tray. It's a separate part from the drawer, so it prints flat with nothing hanging in the air. It sits in a notch in the top of the drawer's back, with its tray just under the arm; its back wall fills the notch, flush with the outside, and is the nose the kicker band pushes on. The latch and kicker forces stay inside the cassette: the band pushes the nose, and the pin holds the arm, which is on the same part. An ear on each side sits against the inside of the drawer's back. `cassette_mount` picks how it's held:
+- **Cassette:** the whole latch mechanism and the kicker's bays on one printed tray. It's a separate part from the drawer, so it prints flat with nothing hanging in the air. It sits in a notch in the top of the drawer's back, with its tray just under the arm; its back wall fills the notch, flush with the outside, and is the nose the kicker band pushes on. The cassette is the same part for every drawer: its size depends on nothing but its own mount (`cassette_mount`, `cassette_bolt`, which shape the ears and back), so one you have printed fits any other drawer made with the same mount. For the same reason the drawer's back wall is always 2 mm, whatever `wall` is, and the housing's kicker posts are always 51.5 mm apart. The latch and kicker forces stay inside the cassette: the band pushes the nose, and the pin holds the arm, which is on the same part. An ear on each side sits against the inside of the drawer's back. `cassette_mount` picks how it's held:
   - `captive_nut` (default): a bolt from outside through the back into a nut held in a hex slot in each ear. The slot keeps the nut from turning and lets it slide up and down, so you can set the cassette's height before tightening. `cassette_bolt` sets the size (M2.5, M3, M4, M5; default M3).
   - `normal`: the same bolts through vertical slots in the ears, with loose nuts.
   - `mortise`: no hardware. The cassette's back wall is a dovetail (20° off square, with a `mortise_clr` gap) that drops into a matching notch and rests on its floor. The dovetail stops it moving forward, and the ears stop it moving back. The notch floor sets its height.
 - **Pull-out catch:** the groove's straight run to the housing's front has a jog in it, so an open drawer stops before it comes right out. It needs no extra part: the latch arm and its band are the spring. Pulling takes the pin up a steep face (60°); pushing the drawer back in takes it up a 45° ramp. With a 2 N latch band that's roughly 3 N to pull it out and 1.3 N to put it back, and the console prints the estimate for your settings. It's a nudge, not a lock: a firm pull or a fast, heavy drawer goes past it. The drawer stops with about 35 mm of its back still in the housing, so the smallest depth with the catch is 100 mm, which opens 69 mm of 104. Turning `catch` off leaves it out, and allows depths down to 62 mm.
 - **Ejector, the kicker:** one short band on two posts that hang from the housing plate, one on each side of the cassette. It is always a little stretched around them (1.2× with the drawer open), so it is never slack. It never hooks onto the drawer, so there is nothing for it to fall off. Over the last 32 mm of closing, the cassette's back pushes the middle of the band back into a V; released, the band pushes the drawer out again and lets go of it. Each post runs in a notch cut into the top of the cassette's back (about 8 mm deep), inside a small walled bay beside the pocket so nothing in the drawer sits in its way. The band has to still be pushing when the latch pin leaves its groove, about 26 mm out. Otherwise the drawer stops with the pin still on its way out and needs a pull before it latches again.
-  - The cassette is as wide as the posts are apart, so the band is kept short. The console picks the shortest ½" length (1.5"–6") that a band you can buy (about 2 N or more) suits for the drawer's estimated weight, and says what strength that is. Use a band about that strong and set `kicker_band_n` to it. The aim is that an empty drawer opens about twice the stroke.
-  - The band always sits on its posts at the same 1.2× stretch, so a shorter band means posts closer together. The closed stretch is the same 32 mm stroke whatever the band, so on a shorter band it's a bigger share of its length. It stretches further (up to 2.5× at most) and stores more energy for the same strength. So a short band needs a weaker rubber band, and a heavier drawer can use a shorter one. Printed drawers, M3 captive nuts:
+  - The band is always a 2" one (51 mm flat), because the posts are the same distance apart on every drawer. It sits on them at 1.2× its length and is stretched to 2.1× with the drawer closed. Only its strength is yours to choose: a wider band pushes harder. 1/16" wide is about 2 N, the default `kicker_band_n`. These are the console's rough figures for an empty printed drawer with a 2 N band:
 
-    | drawer (interior, mm) | rough weight | band | post spacing | stretched closed | band strength | cassette width |
-    |---|---|---|---|---|---|---|
-    | 120 × 100 × 30 | 119 g | 3" | 82 mm | 1.6× | 1.7 N | 112 mm |
-    | 200 × 150 × 40 | 220 g | 3" | 82 mm | 1.6× | 2.9 N | 112 mm |
-    | 400 × 200 × 20 | 318 g | 2.5" | 67 mm | 1.8× | 2.6 N | 97 mm |
-    | 300 × 300 × 60 | 514 g | 2" | 52 mm | 2.1× | 2.4 N | 81 mm |
+    | drawer (interior, mm) | rough weight | coasts open to | still resets with up to | strength that suits it empty |
+    |---|---|---|---|---|
+    | 120 × 100 × 30 | 119 g | can throw itself out | 950 g inside | 0.6 N |
+    | 150 × 200 × 30 | 185 g | 148 of 204 mm | 880 g | 0.9 N |
+    | 200 × 150 × 40 | 220 g | 124 of 154 mm | 840 g | 1.1 N |
+    | 400 × 200 × 20 | 318 g | 86 of 204 mm | 750 g | 1.5 N |
+    | 300 × 300 × 60 | 514 g | 53 of 304 mm | 550 g | 2.4 N |
 
   - Once the band lets go, mostly friction stops the drawer; the pull-out catch only takes a little off a drawer that gets that far. The console warns if your band could throw the empty drawer out, and says what strength it would rather have. Its numbers are rough (estimated weight, PLA-on-PLA friction 0.3), so try it before filling the drawer. A heavier load stops it shorter; if it stops before the latch resets, a short pull resets it.
-  - Small, light drawers are the weak spot. The smallest one (84 × 100 × 17 mm, about 80 g) only has room for a 2" band, and that wants a band of about 0.4 N, weaker than you can usually buy. Use the thinnest, weakest band you have, and expect the drawer to pop out further than a bigger one would.
+  - Small, light drawers are the weak spot. Below about 150 g a 2 N band can throw the empty drawer out (the console warns); the smallest one (84 × 100 × 17 mm, about 80 g) wants about 0.4 N, weaker than you can usually buy. Use the thinnest, weakest band you have, or keep some weight in the drawer.
 
 ## Wood face
 The drawer is printed, but its front can carry a wood face. Turn on `wood_face` and the front gets countersunk holes for wood screws from inside the drawer: 12 mm in from each side wall, more in between on drawers wider than about 225 mm, and two rows when the inside is 50 mm or taller. `wood_face_screw` picks the size (#6 by default), and the heads sit just below the surface.
 
 - With a printed front panel, that panel is still what stops the drawer against the housing, so the wood doesn't affect the latch. Set `panel_t = 0` to leave the panel off and screw the wood straight onto the box: the wood is then the stop, so its back must be flat and it must reach past the opening onto the housing's side walls. The screw heads stick out a little on the inside, because the wall alone is too thin to sink them. Without a wood face, `panel_t = 0` leaves the drawer with no stop but the latch pin, and the console warns.
 - The wood can be any size. The console prints the size that just covers the printed front (or the housing); make it bigger to overhang the housing, but keep its top edge off the desk.
-- Set `wood_face_t` to the wood's thickness. The console prints the longest screw that won't come through (the printed front plus the wood, less 2 mm), and the wood's weight (0.6 g/cm³, as big as the printed front) counts when the kicker band is picked. A bigger or denser face weighs more and wants a stronger band.
+- Set `wood_face_t` to the wood's thickness. The console prints the longest screw that won't come through (the printed front plus the wood, less 2 mm), and the wood's weight (0.6 g/cm³, as big as the printed front) counts in the kicker band estimates. A bigger or denser face weighs more and wants a stronger band.
 - Put the face on before the cassette goes in. Tape it in place, drill pilot holes through the printed ones, and screw it on. In a short drawer a driver only fits at an angle; use a stubby or right-angle one.
 
 ## Hardware
 - Countersunk wood screws: 4 for small drawers, more for long ones (the console prints the count; `screw_spacing` sets the most space allowed between screws along each side, default 100 mm, so a 200 mm deep drawer gets 6). #8 / 4 mm by default (pick #6, #8, #9 or #10 with `screw`). Length = desk thickness minus a few mm + 5 mm (the plate)
-- Ejector: 1 short rubber band for the kicker, its length and strength picked for the drawer. The console says which
+- Ejector: 1 rubber band for the kicker, 2" (51 mm) flat length, 1/16" wide (a #14) to start with; a wider one for a heavy drawer
 - 1 rubber band for the latch (size printed in the console; default: about 77 mm around / 39 mm flat, e.g. a #10 to #12 band, or a smaller one doubled)
 - Wood face (optional): countersunk wood screws, #6 by default (the console prints how many and how long)
-- Cassette: 2 bolts and nuts, M3 by default (about the back wall's thickness + 8 mm long, so 10–12 mm on a printed drawer), unless `cassette_mount = mortise`
+- Cassette: 2 bolts and nuts, M3 by default (about 10 mm long), unless `cassette_mount = mortise`
 
 ## Print settings
 - No part flexes, so PLA or PETG both work for every part.
@@ -73,9 +95,9 @@ The smallest drawer is **84 mm wide, 100 mm deep, 17 mm tall** (interior); anyth
 ## Tuning (Customizer)
 - Slide too tight or too loose: `slide_clr`, `side_clr`.
 - Arm sticks or wobbles on its pivot: `arm_clr`. Latch feels stiff or weak: use a looser or tighter latch band.
-- Latch won't engage or release reliably: `pin_clr`. If you change the cam numbers, re-check them with `tools/camsim.ps1` (see below).
+- Latch won't engage or release reliably: `pin_clr` (it widens the groove; the cassette and arm stay the same). If you change the cam numbers, re-check them with `tools/camsim.ps1` (see below).
 - Drawer stops short and needs a pull before it latches again: use a stronger kicker band, or check the [energy map](#energy-map) for an uphill stretch.
-- Ejection too weak or too violent: set `kicker_band_n` to your band's strength and use the length the console picks, which is what the console's estimate of how far the empty drawer coasts goes by.
+- Ejection too weak or too violent: use a wider or narrower 2" band. Set `kicker_band_n` to its strength for the console's estimate of how far the empty drawer coasts.
 - Pull-out catch too weak or too stiff: use a weaker or stronger latch band, or change the fixed `catch_angle` in the file a few degrees at a time (friction makes it climb fast; past about 70° it may not let go at all).
 - Mortise cassette too tight or loose in its notch: `mortise_clr`.
 

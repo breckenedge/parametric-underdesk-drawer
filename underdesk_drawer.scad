@@ -45,7 +45,7 @@ inner_w = 150;  // [84:0.1:500]
 inner_d = 200;  // [62:0.1:500]
 // Inside height
 inner_h = 30;  // [17:0.1:300]
-// Side and back wall thickness
+// Side and front wall thickness (the back is always 2 mm, to fit the cassette)
 wall = 2; // [1:0.1:6]
 // Floor thickness
 floor_t = 1.6; // [0.8:0.1:5]
@@ -82,7 +82,7 @@ cassette_bolt = 3; // [2.5:M2.5, 3:M3, 4:M4, 5:M5]
 
 /* [Rubber bands] */
 // Strength of the kicker band: the pull (N) that stretches it to twice its length. 1/16 inch wide is about 2, 1/8 inch about 4
-kicker_band_n = 4; // [0.2:0.1:20]
+kicker_band_n = 2; // [0.2:0.1:20]
 // Strength of the latch band (only for the estimates in the console)
 latch_band_n = 2; // [0.5:0.1:20]
 
@@ -92,7 +92,7 @@ slide_clr = 0.35; // [0:0.05:1.5]
 // Gap between the drawer's lips and the housing's sides
 side_clr = 0.6; // [0:0.05:2]
 // Gap around the latch pin in its groove
-pin_clr = 0.35; // [0:0.05:1]
+pin_clr = 0.35; // [0.1:0.05:0.6]
 // Gap around the latch arm's pivot post
 arm_clr = 0.2; // [0:0.05:1]
 // Gap around the cassette's dovetail
@@ -115,7 +115,9 @@ latch_y = 0;          // sideways shift of the latch and its cassette (+ = left,
 pin_d = 3;
 pin_h = 3.2;          // pin above the drawer rim
 groove_depth = 3.4;
-cam_wall_min = 1.6;   // printed wall between groove branches
+cam_wall_min = 1.6;   // printed wall between groove branches (at pin_clr = pin_clr0)
+pin_clr0 = 0.35;      // the groove's path and the cassette are laid out for these clearances; pin_clr and
+arm_clr0 = 0.2;       // arm_clr only change the groove's width and the arm's bore
 stop_back = 1.2;      // how far short of the groove end the panel stops the drawer
 // Latch arm: a rigid part that carries the pin. It swings sideways on a post at its front end, so it
 // can't jam or tip like a slider. The groove is corrected for the arc the pin travels.
@@ -134,11 +136,14 @@ cpost_d = 4;
 catch_h = 7;          // how far the jog swings the arm
 catch_angle = 60;     // steepness on the way out, degrees off the direction of travel. Friction counts for
                       // a lot: past about 70 the drawer may not come out at all
-// Cassette
+// Cassette. It is the same part for every drawer: nothing in its shape may depend on the drawer's, the
+// housing's, the bands' or the fit's settings, only on its own two (cassette_mount, cassette_bolt)
+back_t = 2;           // drawer's back wall, and the cassette's back that fills the notch in it
 mortise_angle = 20;   // the dovetail's side angle
 // Kicker
 band_stroke = 32;     // how far it pushes (raised to what the latch needs if lower)
 post_d = 6;
+k_band = 50.8;        // band's flat length (2"); it sets how far apart the posts are
 // Plate windows
 window_rib = 8;
 window_target = 40;
@@ -172,7 +177,7 @@ for (c = [["inner_w", inner_w, min_w], ["inner_d", inner_d, min_d], ["inner_h", 
   if (c[1] < c[2]) echo(str("WARNING: ", c[0], " = ", c[1], " is below the minimum – using ", c[2], " mm"));
 // ------------------------------------------------------------- derived
 Wd = in_w + 2*wall;            // drawer outer width (body)
-Dd = in_d + 2*wall;            // drawer outer depth (body)
+Dd = in_d + wall + back_t;     // drawer outer depth (body)
 Hd = in_h + floor_t;           // drawer outer height (body)
 z_rim = -plate_t - top_gap;       // drawer rim (use coords, desk = z0)
 z_bot = z_rim - Hd;
@@ -190,7 +195,7 @@ z_hbot = ledge_top(y_li) - ledge_min;
 // Everything below describes the PIN CENTRE path; the groove is that
 // path grown by r_eff.
 r_eff = pin_d/2 + pin_clr;
-cam_g = 2*r_eff + cam_wall_min;   // centre-to-centre spacing for a solid wall
+cam_g = pin_d + 2*pin_clr0 + cam_wall_min;   // centre-to-centre spacing for a solid wall
 v_l  = -cam_g;                    // exit channel (left of island nose)
 v_le = 2;                         // stroke-2 end / exit column
 v_n  = v_le + cam_g;              // latch notch
@@ -289,8 +294,8 @@ assert(p4_gap >= cam_g - 0.05, str("exit curve runs within ", p4_gap, " mm of an
 cam_rest_v = 1.0;
 
 // arm / pin placement (drawer coords; equal to housing coords when closed)
-throw_r = v_rc - cam_rest_v + pin_clr;          // max pin travel from rest, each way
-throw_l = abs(v_l) + cam_rest_v + pin_clr;
+throw_r = v_rc - cam_rest_v + pin_clr0;         // max pin travel from rest, each way
+throw_l = abs(v_l) + cam_rest_v + pin_clr0;
 spool_fl = 1;                                   // band post flare (radius added)
 // Place the arm so the groove's lateral extent (v_l..v_rc) is centred,
 // then shift by latch_y. +y is the drawer's left, seen from the front.
@@ -300,11 +305,11 @@ yb_c = -((v_l + v_rc)/2 - cam_rest_v);          // arm centre line for a centred
 screw_cs_r = screw_head_d/2 + screw_recess;
 screw_y = y_li - screw_cs_r - 1;
 yb = latch_y + yb_c;                            // arm centre line (pin at rest)
-x_bpost = Dd - wall - 2 - cpost_d/2;            // 2 mm behind it for the band to wrap
+x_bpost = Dd - back_t - 2 - cpost_d/2;            // 2 mm behind it for the band to wrap
 x_tip = x_bpost - cband_back;                   // arm tip end (rounded, radius arm_w/2)
 x_pin = x_tip - arm_w/2;                        // pin sits at the centre of the rounded tip
 x_pv  = x_pin - arm_r;                          // pivot post
-hub_d = arm_post_d + 2*arm_clr + 2*2.4;
+hub_d = arm_post_d + 2*arm_clr0 + 2*2.4;
 x_sp  = x_pv - hub_d/2 - 1 - cpost_d/2 - spool_fl;   // spreader, just clear of the hub
 phi_l = asin(min(1, throw_l / arm_r));          // arm swing each way (deg)
 phi_r = asin(min(1, throw_r / arm_r));
@@ -377,7 +382,8 @@ ear_w = cm_mort ? 4 : cm_nut ? nut_af + 2.4 : cb_hole + 4.6;
 // attached to the drawer: over the last k_s mm of closing the back of the latch cassette (the
 // "nose") pushes the middle of the band back into a V, and released, the band pushes it out again
 // and lets go. Each post runs in a notch cut into the top of the cassette's back, inside a small
-// walled bay so nothing in the drawer gets in its way.
+// walled bay so nothing in the drawer gets in its way. The posts are the same distance apart on every
+// drawer, so the band's length is always the same too; only its strength suits the drawer.
 // After the band lets go friction stops the drawer (and the pull-out catch, weakly). So the band has to be weak
 // enough not to throw it out, and the console suggests a strength for the drawer's weight.
 kp_d = post_d;                 // post shaft where the band sits
@@ -403,7 +409,7 @@ k_rp = kp_r + kp_clr;                          // post's swept radius, with its 
 k_xf = x_kp - k_rp - k_bw;                     // the bays' front walls
 k_amin = k_n + k_rp + 0.3;                      // post track clear of the pocket wall
 // bay and cassette ear inside the side wall
-k_ylim = min(Wd/2 - wall - k_bw - kp_r - kp_clr - ear_w - 0.5,
+k_ylim = min(in_w/2 - k_bw - kp_r - kp_clr - ear_w - 0.5,
              screw_y - screw_cs_r - 1 - kp_r);   // post clear of the countersinks
 
 // Mostly friction stops the drawer once the kicker lets go, so the band is sized for the drawer's weight.
@@ -411,7 +417,7 @@ k_ylim = min(Wd/2 - wall - k_bw - kp_r - kp_clr - ear_w - 0.5,
 // panel. The drawer hangs on 45° ledges, which presses them with sqrt(2) x its weight; PLA on PLA ~0.3.
 panel_w = 2*y_ho;                               // front panel: as wide as the housing
 panel_h = -panel_top_gap - z_bot;
-d_mass = 1.24e-3 * (Wd*Dd*floor_t + 2*(Wd + Dd)*wall*in_h + panel_w*panel_h*panel_t
+d_mass = 1.24e-3 * (Wd*Dd*floor_t + (2*Dd + Wd)*wall*in_h + Wd*back_t*in_h + panel_w*panel_h*panel_t
                     + 2*Dd*(lip*lip/2 + lip*lip_edge) + (Dd - pocket_x0)*(2*k_n + 60)*4)   // g (cassette too)
          + (wood_face ? 0.6e-3 * panel_w*panel_h*wood_face_t : 0);
 k_mu = 0.3;
@@ -427,27 +433,11 @@ catch_w = catch ? (e_latch(cam_rest_v + catch_h) - e_latch(cam_rest_v)) * tan(ca
 function k_e1_of(L, a) = band_e(1, k_len(Dd, a), 2*L) - band_e(1, k_len(0, a), 2*L);
 // the strength that gives twice what an empty drawer needs to get to the end of the stroke, so it
 // coasts about one more stroke; heavier drawers coast less
-function k_nrec_of(L, a) = 2*(fric(d_mass)*k_s + k_hill) / k_e1_of(L, a);
-// 1/2" band sizes, 1.5" to 6": posts spaced for k_pre, keep the ones that fit and stretch at most
-// 2.5x closed. A longer band sits on posts further apart and is stretched less, so it gives less
-// energy for its strength: pick the length whose suggested strength is nearest kicker_band_n.
-k_cands = [for (k = [3:12]) let(L = k*12.7, a = (k_pre*2*L - PI*kp_d)/4)
-  if (a >= k_amin && abs(yk) + a <= k_ylim && k_len(Dd, a) / (2*L) <= 2.5) [L, a, abs(ln(k_nrec_of(L, a) / kicker_band_n))]];
-k_fit = len(k_cands) > 0 && z_knb > z_bot + floor_t + 2 && k_xf > pocket_x0;
-k_best = k_fit ? min([for (c = k_cands) c[2]]) : 0;
-// the cassette is as wide as the posts are apart, so keep it as narrow as possible: the shortest
-// length a band you can buy (k_nmin, a 1/16" band is about 2 N) suits; the console then says what
-// strength to use. If none does (a very light drawer), the length nearest kicker_band_n.
-k_nmin = 2;
-k_short = [for (c = k_cands) if (k_nrec_of(c[0], c[1]) >= k_nmin) c];
-k_pick = !k_fit ? [38.1, k_amin, 0]
-       : len(k_short) > 0 ? k_short[0]
-       : [for (c = k_cands) if (c[2] <= k_best + 1e-9) c][0];
-k_band = k_pick[0];                             // flat length
-k_a = k_pick[1];                                // post offset from yk
+k_a = (k_pre*2*k_band - PI*kp_d)/4;             // post offset from yk: the band stretched k_pre on them
+k_fit = abs(yk) + k_a <= k_ylim && z_knb > z_bot + floor_t + 2;
 k_stretch = k_len(Dd, k_a) / (2*k_band);
 k_e1 = k_e1_of(k_band, k_a);
-k_n_rec = k_nrec_of(k_band, k_a);
+k_n_rec = 2*(fric(d_mass)*k_s + k_hill) / k_e1;
 // the cassette sits in a notch in the drawer's back wall, which leaves at least 5 mm of wall under it
 c_deep = (z_mf - ct_t - 1) - (z_bot + floor_t) >= 5;
 c_need_h = ceil(in_h + 5 - ((z_mf - ct_t - 1) - (z_bot + floor_t)));
@@ -475,12 +465,15 @@ wf_ys = [for (i = [0:wf_n-1]) -in_w/2 + 12 + i*(in_w - 24)/(wf_n - 1)];
 wf_zs = [for (f = in_h >= 50 ? [0.25, 0.75] : [0.5]) z_bot + floor_t + f*in_h];
 
 // ------------------------------------------------------------- checks
-assert(k_fit, "the kicker doesn't fit beside the latch pocket – increase inner_w (or inner_d / inner_h)");
+assert(k_a >= k_amin, "kicker posts too close together for the latch pocket – raise k_band");
+assert(k_stretch <= 2.5, "kicker band stretched too far – raise k_band");
+assert(k_xf > pocket_x0, "kicker bays reach past the front of the latch pocket");
+assert(k_fit, "the cassette doesn't fit – increase inner_w (or inner_h)");
 echo(str("Drawer body ", Wd, " x ", Dd, " x ", Hd, " mm; housing ", 2*y_ho, " x ", Dh,
          " x ", -z_hbot, " mm (+ kicker posts)"));
 echo(str("Latched drawer sits ", u_stop - u_a, " mm proud; push-release travel the same"));
 echo(str("Latch cassette ", round(yc1 - yc0 + 2*ear_w), " mm wide (with its ears), ", round(Dd - pocket_x0), " deep: room beside it at the back: ",
-         max(0, round(Wd/2 - wall - yc1 - ear_w)), " mm on the left, ", max(0, round(yc0 - ear_w + Wd/2 - wall)), " mm on the right"));
+         max(0, round(in_w/2 - yc1 - ear_w)), " mm on the left, ", max(0, round(yc0 - ear_w + in_w/2)), " mm on the right"));
 echo(str("Desk screws: ",2*screw_n_side, " (", screw_n_side, " per side, ",
          round((Dh - 24)/(screw_n_side - 1)), " mm apart)"));
 function r1(x) = round(x*10)/10;
@@ -489,7 +482,7 @@ echo(str("Ejector: kicker – 1 band of ", k_band/25.4, "\" (", round(k_band), "
          r1(k_stretch), "x closed, and pushes the drawer ", k_s, " mm, then lets go; friction", catch ? " (and the pull-out catch)" : "", " stops it after that"));
 let(c = k_coast(kicker_band_n, d_mass))
 echo(str("Kicker band: ", kicker_band_n, " N (kicker_band_n; 1/16\" wide is about 2 N, 1/8\" about 4 N), drawer of roughly ",
-         round(d_mass), " g; ", r1(k_n_rec), " N would suit this length best. Rough guide",
+         round(d_mass), " g; ", r1(k_n_rec), " N would suit it best empty. Rough guide",
          " (friction varies): empty, it coasts ~", round(max(0, c)), " mm past the ", k_s, " mm push (~", round(k_s + max(0, c)),
          " mm open of ", Dd, "), and it still opens far enough to reset the latch with up to ~",
          round(max(0, k_maxg(kicker_band_n) - d_mass)), " g inside. A heavier load stops it short (a pull resets it);",
@@ -497,9 +490,8 @@ echo(str("Kicker band: ", kicker_band_n, " N (kicker_band_n; 1/16\" wide is abou
 if (k_thrown(kicker_band_n) > 0)
   echo(str("WARNING: a ", kicker_band_n, " N kicker band can throw this empty drawer out – use a weaker one (about ",
            r1(k_n_rec), " N)"));
-if (abs(ln(k_n_rec / kicker_band_n)) > ln(1.25))
-  echo(str("WARNING: the kicker band is the shortest that keeps the cassette narrow; it wants about ", r1(k_n_rec),
-           " N – use a band about that strong and set kicker_band_n = ", r1(k_n_rec), " (now ", kicker_band_n, ")"));
+if (k_maxg(kicker_band_n) < d_mass)
+  echo(str("WARNING: a ", kicker_band_n, " N kicker band is too weak to open even this empty drawer far enough – use about ", r1(k_n_rec), " N"));
 echo(catch ? str("Pull-out catch: the open drawer stops ", round(catch_out), " mm out of ", Dd, "; pulling it past takes roughly ",
                  r1(catch_f(catch_angle)), " N and pushing it back in ", r1(catch_f(catch_ramp)), " N (with a ", latch_band_n,
                  " N latch band, latch_band_n; friction varies)")
@@ -529,7 +521,7 @@ assert(pocket_y1 < Wd/2 - wall - 5 && pocket_y0 > -Wd/2 + wall + 5,
 assert(screw_y + screw_cs_r < y_li, "screw countersink overlaps the slide ledge");
 assert(groove_y1 + 1 + screw_head_d/2 < screw_y && groove_y0 - 1 - screw_head_d/2 > -screw_y,
        "latch groove runs into a screw row – move latch_y toward the centre");
-assert(!k_fit || (yk + k_a - kp_r > groove_y1 + 1 && yk - k_a + kp_r < groove_y0 - 1),
+assert(yk + k_a - kp_r > groove_y1 + 1 && yk - k_a + kp_r < groove_y0 - 1,
        "kicker posts run into the latch groove");
 assert(c_deep, str("drawer too shallow for the latch cassette – inner_h needs about ", c_need_h));
 assert(cm_nut || cm_mort || cassette_mount == "normal", "cassette_mount must be captive_nut, normal or mortise");
@@ -650,7 +642,7 @@ module housing() {
 // corners step outward with the lips, so they need no support; they also lead the lips into the housing.
 module drawer_outside() {
   z0 = z_rim - lip_edge - lip;  z1 = z_rim - lip_edge;   // lips' 45° underside
-  module walls_2d() { let(r = min(corner_d, 1.5*wall)) round_back_2d(Dd, y_wo, r, panel_t > 0 ? 0 : r); }   // the wall stays solid at the corner
+  module walls_2d() { let(r = min(corner_d, 1.5*min(wall, back_t))) round_back_2d(Dd, y_wo, r, panel_t > 0 ? 0 : r); }   // the wall stays solid at the corner
   module lips_2d()  { round_back_2d(Dd, y_wo + lip, corner_d, panel_t > 0 ? 0 : corner_d); }
   translate([0, 0, z_bot]) linear_extrude(z0 - z_bot + eps) walls_2d();
   hull() {
@@ -681,7 +673,7 @@ z_c0 = z_mf - eps;                              // where they start, just into t
 module latch_pocket() {   // U-shaped guard: front partition + two side walls to the back wall
   pt = 1.2;
   translate([pocket_x0, pocket_y0, z_c0]) cube([pt, pocket_y1 - pocket_y0, z_rim - z_c0]);
-  for (y = [pocket_y0, pocket_y1 - pt]) translate([pocket_x0, y, z_c0]) cube([Dd - wall - pocket_x0 + eps, pt, z_rim - z_c0]);
+  for (y = [pocket_y0, pocket_y1 - pt]) translate([pocket_x0, y, z_c0]) cube([Dd - back_t - pocket_x0 + eps, pt, z_rim - z_c0]);
 }
 
 module latch_pivot() {   // shoulder the hub sits on, and the post it turns on
@@ -732,10 +724,10 @@ module kick_notch() { translate([0, 0, z_knb]) linear_extrude(z_rim - z_knb + 1)
 module kick_bays() {
   for (s = [-1, 1]) let(y0 = yk + s*k_n, y1 = yk + s*(k_a + k_rp + k_bw)) {
     translate([k_xf, min(y0, y1), z_c0]) cube([k_bw, abs(y1 - y0), z_rim - z_c0]);
-    translate([k_xf, min(y1, y1 - s*k_bw), z_c0]) cube([Dd - wall - k_xf + eps, k_bw, z_rim - z_c0]);
+    translate([k_xf, min(y1, y1 - s*k_bw), z_c0]) cube([Dd - back_t - k_xf + eps, k_bw, z_rim - z_c0]);
   }
 }
-// the latch cassette: the latch pocket, pivot, tip support and band posts and the kicker bays, on a
+// the latch cassette (the same for every drawer): the latch pocket, pivot, tip support and band posts and the kicker bays, on a
 // tray at z_mf, printed flat on its tray; its back wall fills the notch in the drawer's
 // back and is the kicker's nose. An ear either side sits
 // against the back's inner face: bolted through it (cassette_mount captive_nut or normal, on
@@ -748,8 +740,8 @@ mt_t = cm_mort ? tan(mortise_angle) : 0;        // mortise: the dovetail's sides
 // the cassette's back wall in plan (x, y), c wider each side and ext longer at both faces (for the
 // notch): a dovetail for mortise, else a plain block
 module c_back_2d(c = 0, ext = 0) {
-  x0 = Dd - wall - ext;  x1 = Dd + ext;
-  h0 = (yc1 - yc0)/2 + c - ext*mt_t;  h1 = (yc1 - yc0)/2 + c + (wall + ext)*mt_t;
+  x0 = Dd - back_t - ext;  x1 = Dd + ext;
+  h0 = (yc1 - yc0)/2 + c - ext*mt_t;  h1 = (yc1 - yc0)/2 + c + (back_t + ext)*mt_t;
   polygon([[x0, yk - h0], [x0, yk + h0], [x1, yk + h1], [x1, yk - h1]]);
 }
 module cassette() {
@@ -758,20 +750,20 @@ module cassette() {
     union() {
       latch_pocket(); latch_pivot(); latch_tip_support(); latch_band_posts(); kick_bays();
       // tray: only under the walls' outline – the pocket, and the two kicker bays beside it
-      translate([pocket_x0, pocket_y0, z_cb]) cube([Dd - wall - pocket_x0 + eps, pocket_y1 - pocket_y0, ct_t]);
-      translate([k_xf, yc0, z_cb]) cube([Dd - wall - k_xf + eps, yc1 - yc0, ct_t]);
+      translate([pocket_x0, pocket_y0, z_cb]) cube([Dd - back_t - pocket_x0 + eps, pocket_y1 - pocket_y0, ct_t]);
+      translate([k_xf, yc0, z_cb]) cube([Dd - back_t - k_xf + eps, yc1 - yc0, ct_t]);
       translate([0, 0, z_cb]) linear_extrude(z_rim - z_cb) c_back_2d();                       // back wall
-      for (y = [ys0, yc1]) translate([Dd - wall - ear_t, y, z_cb]) cube([ear_t, ear_w, z_rim - z_cb]);   // ears
+      for (y = [ys0, yc1]) translate([Dd - back_t - ear_t, y, z_cb]) cube([ear_t, ear_w, z_rim - z_cb]);   // ears
     }
     kick_notch();
     if (!cm_mort) for (y = [ys0 + ear_w/2, yc1 + ear_w/2]) {
       // bolt slot through the ear
       hull() for (z = [cb_z0, cb_z1])
-        translate([Dd - wall - ear_t - 1, y, z]) rotate([0, 90, 0]) cylinder(d = cb_hole, h = ear_t + 2, $fn = 16);
+        translate([Dd - back_t - ear_t - 1, y, z]) rotate([0, 90, 0]) cylinder(d = cb_hole, h = ear_t + 2, $fn = 16);
       // captive nut: a hex slot from the ear's inner face, the nut's flats against its sides so it can't
       // turn but can slide up and down with the bolt
       if (cm_nut) hull() for (z = [cb_z0, cb_z1])
-        translate([Dd - wall - ear_t - 1, y, z]) rotate([0, 90, 0]) cylinder(d = nut_ac, h = 1 + nut_t, $fn = 6);
+        translate([Dd - back_t - ear_t - 1, y, z]) rotate([0, 90, 0]) cylinder(d = nut_ac, h = 1 + nut_t, $fn = 6);
     }
   }
 }
@@ -782,8 +774,8 @@ wn_c = cm_mort ? mortise_clr : 0.5;
 wn_z = cm_mort ? z_cb : z_cb - 1;
 module c_notch_cut() {
   translate([0, 0, wn_z]) linear_extrude(z_rim - wn_z + 1) c_back_2d(wn_c, 1);
-  if (!cm_mort) for (y = [yc0 - ear_w/2, yc1 + ear_w/2]) translate([Dd - wall - 1, y, c_bolt_z]) rotate([0, 90, 0])
-    cylinder(d = cb_hole, h = wall + 2, $fn = 16);
+  if (!cm_mort) for (y = [yc0 - ear_w/2, yc1 + ear_w/2]) translate([Dd - back_t - 1, y, c_bolt_z]) rotate([0, 90, 0])
+    cylinder(d = cb_hole, h = back_t + 2, $fn = 16);
 }
 // screw holes for a wood face, countersunk on the inside: the heads sit 0.3 mm below the surface, or
 // stick out a little if the front is too thin to leave 1 mm under them
@@ -810,7 +802,7 @@ module drawer_body() {
       // front panel – also the closing stop against the housing face
       if (panel_t > 0) translate([eps, 0, z_bot]) mirror([1, 0, 0]) linear_extrude(panel_h) round_back_2d(panel_t + eps, panel_w/2, min(corner_d, 0.75*panel_t));
     }
-    translate([wall, -Wd/2 + wall, z_bot + floor_t]) cube([Dd - 2*wall, Wd - 2*wall, Hd]);
+    translate([wall, -Wd/2 + wall, z_bot + floor_t]) cube([in_d, in_w, Hd]);
     c_notch_cut();   // the cassette's notch and bolt holes
     if (wood_face) wood_face_holes();
   }
@@ -991,7 +983,7 @@ else if (part == "animation") scene(an_pin($t), "groove", animation_drawer);
 else if (part == "energy_map") { energy_map(); cube(1); }
 else if (part == "housing") rotate([180,0,0]) housing();   // desk face down on the bed
 else if (part == "drawer")   translate([0, 0, -z_bot]) drawer_body();   // floor on the bed
-else if (part == "cassette") translate([0, 0, -z_cb]) cassette();       // tray on the bed
+else if (part == "cassette") translate([-pocket_x0, -yk, -z_cb]) cassette();       // tray on the bed
 else if (part == "arm")      latch_arm();                               // flat on the bed, pin up
 else if (part == "cam_paths") {
   // machine-readable dump for the latch simulator
