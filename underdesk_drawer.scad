@@ -25,8 +25,8 @@
 
 /* [Output] */
 // assembly: F5 shows it assembled, F6 renders all parts laid out for printing
-// animation: F5 with Window > Animate open (View > Animate in 2021) runs one push-push cycle per loop;
-// set e.g. FPS 15 and Steps 100 (more for deep drawers)
+// animation: F5 with Window > Animate open (View > Animate in 2021) runs one push-push cycle per loop, with a
+// pull out past the pull-out catch and back in; set e.g. FPS 15 and Steps 200
 // lip_strip, stop_gauge: the printed parts of a wood drawer (drawer_build = wood), with the cassette
 part = "assembly"; // [assembly, animation, energy_map, print_layout, housing, drawer, arm, lip_strip, cassette, stop_gauge, cam_2d, cam_paths]
 // Assembly view: how far the drawer is pulled out (100% = all but 15 mm out of the housing)
@@ -38,11 +38,12 @@ animation_drawer = "solid"; // [solid, ghost]
 /* [Drawer interior (mm)] */
 // Minimums are the smallest sizes that work with defaults for everything else:
 // width – the kicker posts and the cassette's ears either side of the latch (M3 captive nuts; bigger
-// bolts need more, mortise a little less); depth – the latch arm and its band (spreader to back post);
+// bolts need more, mortise a little less); depth – room to open about two thirds of the way before the
+// pull-out catch (62 with catch_h = 0: the latch arm and its band, spreader to back post);
 // height – room for the latch cassette in the back wall.
 // Defaults are the minimums – a small, quick test print.
 inner_w = 84;  // [84:0.1:500]
-inner_d = 62;  // [62:0.1:500]
+inner_d = 100;  // [62:0.1:500]
 inner_h = 17;  // [17:0.1:300]
 // Number of lengthwise dividers (0 = none)
 dividers = 0;
@@ -195,7 +196,9 @@ screw_recess = 0.4;
 
 // Sizes below the minimums (e.g. a value the Customizer kept from an older version
 // of this file) are raised to the minimum, with a warning, instead of failing.
-min_w = 84;  min_d = 62;  min_h = 17;
+// With the pull-out catch a drawer stops about 35 mm short of its depth, so it is kept deep enough to
+// open about two thirds of the way (and past the kicker's push); without it, the latch arm sets the depth.
+min_w = 84;  min_d = catch_h > 0 ? 100 : 62;  min_h = 17;
 wood_min_w = 87;               // wood (M3 captive nuts): room for the strips beside the cassette too
 in_w = max(inner_w, min_w);
 in_d = max(inner_d, min_d);
@@ -987,20 +990,28 @@ function v_free(u) = path_v(mouth_path, u);
 function v_exit(u)  = u >= 0 ? path_v(cam_paths[3], u) : v_free(u);   // going out (after release)
 function v_entry(u) = u >= 0 ? path_v(cam_paths[0], u) : v_free(u);   // going in
 // Animation, one push-push cycle per run of $t: latched (pause) -> push -> released, out along the
-// exit path to where the ejector leaves it (ej_rest; pause) -> in along the entry path to the stop ->
-// let go, back into the notch.
-// Phase lengths are in mm of travel (pauses as 12 mm), so the drawer moves at a steady pace.
+// exit path to where the ejector leaves it (ej_rest; pause) -> pulled to the pull-out catch (pause) ->
+// pulled up over it until the pin is out of the plate (pause) -> in over the catch's ramp and along
+// the entry path to the stop -> let go, back into the notch. Without the catch (catch_h = 0) it goes
+// back in from where the ejector leaves it.
+// Phases are [u from, u to, the pin's v at u, length]. Lengths are in mm of travel (pauses 12), so the
+// drawer moves at a steady pace, but at most 120 so the latch isn't over in a flash on a deep drawer.
 an_umin = u_stop - ej_rest;
-an_d = [12, u_stop - u_a, u_stop - an_umin, 12, u_stop - an_umin, u_stop - u_a];
-an_tot = an_d[0] + an_d[1] + an_d[2] + an_d[3] + an_d[4] + an_d[5];
-function an_phase(T, k = 0) = k >= 5 || T < an_d[k] ? [k, max(0, min(1, T / an_d[k]))] : an_phase(T - an_d[k], k + 1);
-function an_pin(t) = let(p = an_phase(t * an_tot), k = p[0], f = 0.5 - 0.5*cos(180*p[1]))
-  k == 0 ? [u_a, v_n] :
-  k == 1 ? let(u = u_a + (u_stop - u_a)*f) [u, path_v(cam_paths[2], u)] :
-  k == 2 ? let(u = u_stop - (u_stop - an_umin)*f) [u, v_exit(u)] :
-  k == 3 ? [an_umin, v_free(an_umin)] :
-  k == 4 ? let(u = an_umin + (u_stop - an_umin)*f) [u, v_entry(u)] :
-           let(u = u_stop - (u_stop - u_a)*f) [u, path_v(cam_paths[1], u)];
+an_uc = min(an_umin, catch_uf);                 // meets the catch
+an_uo = -x_cam0 - 4;                            // pin out of the plate
+an_uin = catch ? an_uo : an_umin;               // where it is pushed back in from
+v_push2 = function(u) path_v(cam_paths[2], u);
+v_out_f = function(u) v_exit(u);
+an_go = function(a, b, f) [a, b, f, min(120, abs(b - a))];
+an_wait = function(u, f) [u, u, f, 12];
+an_ph = concat(
+  [an_wait(u_a, v_push2), an_go(u_a, u_stop, v_push2), an_go(u_stop, an_umin, v_out_f), an_wait(an_umin, v_out_f)],
+  !catch ? [] : [an_go(an_umin, an_uc, v_out_f), an_wait(an_uc, v_out_f), an_go(an_uc, an_uo, v_out_f), an_wait(an_uo, v_out_f)],
+  [an_go(an_uin, u_stop, function(u) v_entry(u)), an_go(u_stop, u_a, function(u) path_v(cam_paths[1], u))]);
+an_tot = sum([for (p = an_ph) p[3]]);
+function an_pin(t) = an_at(t * an_tot);
+function an_at(T, k = 0) = let(p = an_ph[k]) k < len(an_ph) - 1 && T >= p[3] ? an_at(T - p[3], k + 1) :
+  let(u = p[0] + (p[1] - p[0]) * (0.5 - 0.5*cos(180 * max(0, min(1, T / p[3])))), v = p[2]) [u, v(u)];
 // static assembly: the slider, with the pin on the exit path (the drawer was released and pulled out)
 function slider_pin() = let(u = u_stop - (Dd - 15) * max(0, min(100, assembly_open_pct)) / 100) [u, v_exit(u)];
 
@@ -1086,8 +1097,12 @@ module scene(pin, hmode, dmode) {
   if (hmode == "solid") color("SteelBlue", 0.85) housing();
   else if (hmode == "ghost") %housing();
   else color("SteelBlue") {
-    // groove walls as a 0.8 mm outline, at the plate's underside where the pin runs
-    translate([0, 0, -plate_t]) linear_extrude(1) difference() { offset(r = 0.8) groove_2d(); groove_2d(); }
+    // groove walls as a 0.8 mm outline, at the plate's underside where the pin runs, cut off at the
+    // plate's front edge so it shows the mouth's real shape
+    translate([0, 0, -plate_t]) linear_extrude(1) intersection() {
+      difference() { offset(r = 0.8) groove_2d(); groove_2d(); }
+      translate([0, -y_ho]) square([Dh, 2*y_ho]);
+    }
     kick_posts();
   }
   translate([-open, 0, 0]) {
