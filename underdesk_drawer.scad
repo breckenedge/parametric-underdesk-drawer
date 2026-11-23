@@ -65,7 +65,7 @@ wood_face_screw = 3.5; // [3.5:#6 / 3.5 mm, 4:#8 / 4 mm, 4.5:#9 / 4.5 mm, 5:#10 
 plate_t = 5; // [4.4:0.1:12]
 // Side wall thickness
 housing_wall = 3; // [1.2:0.1:8]
-// Cut windows in the plate to save plastic
+// Cut windows in the plate to save plastic (sloped at 45° so nothing in the drawer catches on them)
 plate_windows = true;
 // Countersunk wood screw size, into the desk
 screw = 4; // [3.5:#6 / 3.5 mm, 4:#8 / 4 mm, 4.5:#9 / 4.5 mm, 5:#10 / 5 mm]
@@ -144,9 +144,14 @@ mortise_angle = 20;   // the dovetail's side angle
 band_stroke = 32;     // how far it pushes (raised to what the latch needs if lower)
 post_d = 6;
 k_band = 50.8;        // band's flat length (2"); it sets how far apart the posts are
-// Plate windows
-window_rib = 8;
-window_target = 40;
+// Plate windows. Once screwed up, the desk carries the housing: the drawer hangs on the rails, the
+// screws are beside them, and the latch and kicker loads are a few newtons. So the plate is just a frame
+// (the rails and screw strips, the groove strip, a bar across the front and back and one under the
+// kicker posts) with the rest cut away. window_max only keeps a long frame from being floppy to handle.
+window_rib = 4;       // bars between windows, at the drawer side (2*plate_t wider at the desk)
+window_end = 10;      // bars across the plate's front and back
+window_max = 200;     // longest window, either way
+window_min = 8;       // smallest opening at the desk side, or none
 
 $fn = $preview ? 32 : 64;
 eps = 0.01;
@@ -587,21 +592,25 @@ module plate_windows() {
   window_band(-yw, pocket_y0 - 6);
 }
 
+// The windows narrow at 45° all the way to the desk, so anything sticking up out of the drawer slides back
+// down as the drawer moves instead of catching on an edge. Printed desk face down they widen upward.
 module window_band(y0, y1) {
-  x0 = 16;  x1 = Dh - 16;
-  nx = max(1, round((x1 - x0) / window_target));
-  ny = max(1, round((y1 - y0) / window_target));
-  cw = (x1 - x0 - (nx-1)*window_rib) / nx;
+  kr = kp_r + 3;   // bar under the kicker posts (they stand at x_kp, either side of the groove strip)
+  segs = [for (s = [[window_end, x_kp - kr], [x_kp + kr, Dh - window_end]]) if (s[1] - s[0] >= window_min + 2*plate_t) s];
+  ny = ceil((y1 - y0 + window_rib) / (window_max + window_rib));
   ch = (y1 - y0 - (ny-1)*window_rib) / ny;
-  // a cell that would come within 3 mm of a kicker post is left solid, so the post stands on
-  // plate that joins the rest (a keep-out disc in the middle of a window would leave it an island)
-  kr = kp_r + 3;
-  keep = [for (s = [-1, 1]) [x_kp, yk + s*k_a]];
-  if (y1 > y0 && cw > 12 && ch > 12)
-    for (i = [0:nx-1], j = [0:ny-1]) let(cx = x0 + i*(cw + window_rib), cy = y0 + j*(ch + window_rib))
-      if (len([for (p = keep) if (p[0] > cx - kr && p[0] < cx + cw + kr && p[1] > cy - kr && p[1] < cy + ch + kr) 1]) == 0)
-        translate([cx, cy, -plate_t - 1])
-          linear_extrude(plate_t + 2) offset(r = 3) offset(delta = -3) square([cw, ch]);
+  if (ch >= window_min + 2*plate_t)
+    for (s = segs) let(nx = ceil((s[1] - s[0] + window_rib) / (window_max + window_rib)),
+                       cw = (s[1] - s[0] - (nx-1)*window_rib) / nx)
+      for (i = [0:nx-1], j = [0:ny-1])
+        translate([s[0] + i*(cw + window_rib), y0 + j*(ch + window_rib), 0]) window_cut(cw, ch);
+}
+module window_cut(w, h) {
+  module opening(c) { translate([c, c]) offset(r = 3) offset(delta = -3) square([w - 2*c, h - 2*c]); }
+  hull() {
+    translate([0, 0, -plate_t - eps]) linear_extrude(eps) opening(0);
+    linear_extrude(eps) opening(plate_t);
+  }
 }
 
 // rectangle from x = 0 to d, hw either side of y = 0, with its two corners at x = d rounded (rf: the
@@ -631,7 +640,6 @@ module housing() {
     }
     groove_cut();
     screw_holes();
-    // (window_band leaves the cells under the kicker posts solid)
     if (plate_windows) plate_windows();
   }
 }
