@@ -790,16 +790,19 @@ module kick_notch() { translate([0, 0, z_knb]) linear_extrude(z_rim - z_knb + 1)
 // back down and a loose or oversized band can't ride up over the nose into the latch pocket. It
 // runs round the curved back and along the pocket's sides as far forward as the posts; it is the
 // only part of the cassette behind the drawer's back (k_lip at the middle).
+// The outline it follows is the nose's, carried forward past the posts, so its front edge (which would
+// bridge the pocket with nothing under it) always falls in the part cut off in front of the posts.
 k_lip = z_rim - (z_kb + 1.5);
+module lip_2d() { nose_2d(); translate([x_kp - 10, yk - k_n]) square([Dd - x_kp, 2*k_n]); }
 module nose_lip() {
   z0 = z_rim - k_lip;
   difference() {
     hull() {
-      translate([0, 0, z0]) linear_extrude(eps) nose_2d();
-      translate([0, 0, z_rim - eps]) linear_extrude(eps) offset(r = k_lip) nose_2d();
+      translate([0, 0, z0]) linear_extrude(eps) lip_2d();
+      translate([0, 0, z_rim - eps]) linear_extrude(eps) offset(r = k_lip) lip_2d();
     }
-    translate([0, 0, z0 - 1]) linear_extrude(k_lip + 2) offset(r = -1) nose_2d();   // 1 mm into the walls
-    translate([0, 0, z0 - 1]) linear_extrude(k_lip + 2) translate([Dd - 40, yk - k_n - k_lip - 1]) square([x_kp - Dd + 40, 2*(k_n + k_lip + 1)]);
+    translate([0, 0, z0 - 1]) linear_extrude(k_lip + 2) offset(r = -1) lip_2d();   // 1 mm into the walls
+    translate([0, 0, z0 - 1]) linear_extrude(k_lip + 2) translate([x_kp - 20, yk - k_n - k_lip - 1]) square([20, 2*(k_n + k_lip + 1)]);
   }
 }
 // the bays: a front wall and an outer wall around each post's notch, so nothing in the drawer sits
