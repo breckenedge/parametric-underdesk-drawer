@@ -59,6 +59,8 @@ wood_face = false;
 wood_face_t = 12; // [6:0.1:30]
 // Countersunk wood screw size
 wood_face_screw = 3.5; // [3.5:#6 / 3.5 mm, 4:#8 / 4 mm, 4.5:#9 / 4.5 mm, 5:#10 / 5 mm]
+// Distance between the outermost screw columns, centre to centre. 0 = 12 mm in from each side wall. At least the cassette's width plus the holes, so the screws clear it; at most what fits between the side walls
+wood_face_spacing = 0; // [0:0.1:520]
 // Holes in the back wall in line with the screws, to drive them with a long screwdriver from behind (fit the face before the cassette). Screws that would land behind the cassette's ears move in to go through its notch instead
 wood_face_access = false;
 // Access hole diameter: the screwdriver's shaft, with some room
@@ -485,14 +487,19 @@ screw_n_side = max(2, ceil((Dh - 24) / screw_spacing) + 1);   // screws per side
 screw_xs = [for (i = [0:screw_n_side-1]) 12 + i * (Dh - 24) / (screw_n_side - 1)];
 
 // wood face: screws through the front panel and the drawer's front wall from inside, heads countersunk
-// into the wall's inner face. A column 12 mm in from each side wall and more between on wide drawers, two
-// rows on tall ones.
+// into the wall's inner face. The outer columns wood_face_spacing apart (or 12 mm in from each side wall),
+// more between on wide drawers, two rows on tall ones.
 wf_d = screw_row(wood_face_screw)[0] + 0.4;
 wf_r = (screw_row(wood_face_screw)[1] + 0.6)/2;  // countersink radius
-wf_n = max(2, ceil((in_w - 24)/200) + 1);
-wf_ys = [for (i = [0:wf_n-1]) -in_w/2 + 12 + i*(in_w - 24)/(wf_n - 1)];
-wf_zs = [for (f = in_h >= 50 ? [0.25, 0.75] : [0.5]) z_bot + floor_t + f*in_h];
 wa_r = wood_face_access_d/2;
+// the outer columns: no closer than the cassette's width with its ears, plus 1 mm and the hole (the access
+// hole, or the countersink) each side, so they clear it; no wider than 1 mm of countersink off the side walls
+wf_span_min = ceil(20*(abs(yk) + (yc1 - yc0)/2 + ear_w + 1 + (wood_face_access ? wa_r : wf_r)))/10;   // to 0.1 mm, so the console's range is exact
+wf_span_max = floor(10*(in_w - 2*(wf_r + 1)))/10;
+wf_span = wood_face_spacing == 0 ? in_w - 24 : min(max(wood_face_spacing, wf_span_min), wf_span_max);
+wf_n = max(2, ceil(wf_span/200) + 1);
+wf_ys = [for (i = [0:wf_n-1]) -wf_span/2 + i*wf_span/(wf_n - 1)];
+wf_zs = [for (f = in_h >= 50 ? [0.25, 0.75] : [0.5]) z_bot + floor_t + f*in_h];
 
 // ------------------------------------------------------------- checks
 assert(k_a >= k_amin, "kicker posts too close together for the latch pocket – raise k_band");
@@ -532,6 +539,11 @@ c_fix_txt = cm_mort ? "slide it down into the notch; the ears stop it on the ins
           : str("drop it into the notch; 2 M", cassette_bolt, " bolts through the back and its ear slots",
                 cm_nut ? ", into nuts pushed into the ears' hex slots" : ", with nuts");
 echo(str("Latch cassette mount: ", cassette_mount, " – ", c_fix_txt));
+if (wood_face && wood_face_spacing != 0 && abs(wf_span - wood_face_spacing) > 1e-6)
+  echo(str("WARNING: wood_face_spacing = ", wood_face_spacing, wf_span_min > wf_span_max ? " – this drawer is too narrow for screws outside the cassette"
+    : wood_face_spacing < wf_span_min ? " is inside the cassette's width" : " doesn't fit between the side walls", " – using ", r1(wf_span), " mm"));
+if (wood_face) echo(str("Wood face screw columns: outer ones ", r1(wf_span), " mm apart", wf_span_min <= wf_span_max
+  ? str(" (wood_face_spacing can be ", wf_span_min, " to ", wf_span_max, " mm)") : " (too narrow a drawer to set wood_face_spacing outside the cassette)"));
 if (wood_face) echo(str("Wood face: ", len(wf_pts), " countersunk wood screws from inside the drawer, up to ",
   wall + panel_t + wood_face_t - 2, " mm long (", wall + panel_t, " mm of printed front + the wood, less 2). A face of ",
   r1(panel_w), " x ", r1(panel_h), " mm ", panel_t > 0 ? "just covers the printed front" :
