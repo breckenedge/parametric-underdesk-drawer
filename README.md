@@ -26,6 +26,8 @@ The latch and kicker with the drawer latched, the housing shown as just its groo
 | `cassette` | tray on the bed | latch pocket, the arm's pivot post and tip support, latch band posts and kicker bays on one flat tray; its back wall is the kicker's nose |
 | `arm` | flat on the bed, pin up | rigid latch arm that carries the pin |
 
+Ready-made STLs, already in print orientation, are in [`stl/`](stl): a folder per Customizer preset with its `housing` and `drawer` (and a `notes.txt` with the console's output and the commit they came from), and the cassette and arm once in `stl/common`, since they fit every drawer. `sh tools/export_stls.sh` regenerates them.
+
 | housing | drawer |
 |---|---|
 | ![housing](images/part-housing.png) | ![drawer](images/part-drawer.png) |

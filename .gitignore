@@ -1,6 +1,6 @@
-# generated outputs
-*.stl
-stl/
+# generated outputs (the exports in stl/common and stl/set-* are committed: tools/export_stls.sh)
+/*.stl
+stl/test-batch/
 *.3mf
 *.echo
 *.png

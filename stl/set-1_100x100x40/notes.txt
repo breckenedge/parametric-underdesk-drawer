@@ -1,0 +1,15 @@
+Preset: New set 1    model commit: 7ad4169
+
+Drawer body 104 x 104 x 42.4 mm; housing 120.6 x 104 x 15.195 mm (+ kicker posts)
+Latched drawer sits 7.4 mm proud; push-release travel the same
+Latch cassette 81 mm wide (with its ears), 59 deep: room beside it at the back: 9 mm on the left, 9 mm on the right
+Desk screws: 4 (2 per side, 80 mm apart)
+Ejector: kicker – 1 band of 2" (51 mm) flat length around the two posts (52 mm apart) behind the latch pocket. It stays on the posts, stretched 1.2x open and 2.1x closed, and pushes the drawer 36 mm, then lets go; friction (and the pull-out catch) stops it after that
+Kicker band: 2 N (kicker_band_n; 1/16" wide is about 2 N, 1/8" about 4 N), drawer of roughly 135 g; 0.8 N would suit it best empty. Rough guide (friction varies): empty, it coasts ~164 mm past the 36 mm push (~200 mm open of 104), and it still opens far enough to reset the latch with up to ~920 g inside. A heavier load stops it short (a pull resets it); a stronger band throws it further
+WARNING: a 2 N kicker band can throw this empty drawer out – use a weaker one (about 0.8 N)
+Pull-out catch: the open drawer stops 69 mm out of 104; pulling it past takes roughly 3 N and pushing it back in 1.3 N (with a 2 N latch band, latch_band_n; friction varies)
+Latch cassette mount: captive_nut – drop it into the notch; 2 M3 bolts through the back and its ear slots, into nuts pushed into the ears' hex slots
+Latch centring band: loop path 116 mm -> use a band of ~77 mm circumference (flat length ~39 mm), or a smaller one doubled
+
+cassette: stl/common/cassette.stl
+arm: stl/common/arm.stl
