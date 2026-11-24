@@ -13,7 +13,7 @@ The latch and kicker with the drawer latched, the housing shown as just its groo
 ![latch mechanism](images/mechanism.png)
 
 
-`underdesk_drawer.scad`: open it in OpenSCAD (nightly, with the Manifold backend). Set the size in the Customizer, then pick `part`.
+`underdesk_drawer.scad`: open it in OpenSCAD (nightly, with the Manifold backend). Set the size in the Customizer, then pick `part`. `outer_w`, `outer_d` and `outer_h` are the overall size, closed: the housing's width, housing back to the front of the drawer (panel and wood face included), and desk to the drawer's bottom. The inside is what's left after the walls, lips, gaps, plate and floor; the console prints both.
 
 `part = assembly` shows the drawer assembled in F5 preview; F6 renders all the parts laid out for printing (`print_layout` shows that layout in F5). The `assembly_open_pct` slider pulls the drawer out (100% leaves 15 mm in the housing). The pin stays in the groove on its way-out path, as after a release, and the latch arm swings to match.
 
@@ -62,7 +62,7 @@ The Customizer only has the choices a builder makes: the drawer's size and walls
     | 300 × 300 × 60 | 606 g | 45 of 304 mm | 450 g | 3.2 N |
 
   - Once the band lets go, mostly friction stops the drawer; the pull-out catch only takes a little off a drawer that gets that far. The console warns if your band could throw the empty drawer out, and says what strength it would rather have. Its numbers are rough (estimated weight, PLA-on-PLA friction 0.3), so try it before filling the drawer. A heavier load stops it shorter; if it stops before the latch resets, a short pull resets it.
-  - Small, light drawers are the weak spot. Below about 150 g a 2 N band can throw the empty drawer out (the console warns); the smallest one (84 × 100 × 17 mm, about 80 g) wants about 0.4 N, weaker than you can usually buy. Use the thinnest, weakest band you have, or keep some weight in the drawer.
+  - Small, light drawers are the weak spot. Below about 150 g a 2 N band can throw the empty drawer out (the console warns); the smallest one (84 × 100 × 17 mm inside, about 80 g) wants about 0.4 N, weaker than you can usually buy. Use the thinnest, weakest band you have, or keep some weight in the drawer.
 
 ## Wood face
 The drawer is printed, but its front can carry a wood face. Turn on `wood_face` and the front gets countersunk holes for wood screws from inside the drawer: 12 mm in from each side wall, more in between on drawers wider than about 225 mm, and two rows when the inside is 50 mm or taller. `wood_face_screw` picks the size (#6 by default), and the heads sit just below the surface.
@@ -85,7 +85,7 @@ The drawer is printed, but its front can carry a wood face. Turn on `wood_face` 
 - Wide, flat parts (the housing and the drawer) can curl off the bed at their corners, PLA included. Their vertical corners are rounded to make that less likely (not the housing's front ones, which the front panel stops against). On top of that, print those two with a 5–8 mm brim, certainly from about 200 mm a side; sparse infill and no drafts help too.
 
 ## Minimum sizes
-The smallest drawer is **84 mm wide, 100 mm deep, 17 mm tall** (interior); anything lower is raised to that, with a warning. The width is the room for the kicker's posts and the cassette's ears on each side of the latch. That's with M3 captive nuts: bigger bolts need a little more, and `mortise` a little less (about 80 mm). The depth lets the drawer open about two thirds of the way before the pull-out catch stops it (69 of 104 mm); with `catch` off it can be as little as 62 mm, which comes from the latch arm and its band (spreader to back post). The height leaves 5 mm of back wall under the cassette's notch.
+The smallest drawer is **84 mm wide, 100 mm deep, 17 mm tall** inside. With the default walls, panel and plate that is **104.6 × 108 × 24.9 mm** overall (`outer_w/d/h`). Anything lower is raised to that, with a warning that gives the overall size it used. The width is the room for the kicker's posts and the cassette's ears on each side of the latch. That's with M3 captive nuts: bigger bolts need a little more, and `mortise` a little less (about 80 mm inside). The depth lets the drawer open about two thirds of the way before the pull-out catch stops it (69 of 104 mm); with `catch` off it can be as little as 62 mm inside, which comes from the latch arm and its band (spreader to back post). The height leaves 5 mm of back wall under the cassette's notch.
 
 ## Install
 1. Screw the housing to the desk. All screws are reachable from below with the drawer out.

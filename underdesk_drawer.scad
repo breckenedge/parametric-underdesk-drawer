@@ -39,12 +39,12 @@ assembly_open_pct = 0; // [0:1:100]
 animation_drawer = "solid"; // [solid, ghost]
 
 /* [Drawer] */
-// Inside width
-inner_w = 150;  // [84:0.1:500]
-// Inside depth (at least 100 with the pull-out catch)
-inner_d = 200;  // [62:0.1:500]
-// Inside height
-inner_h = 30;  // [17:0.1:300]
+// Overall width: the outside of the housing (the front panel is as wide)
+outer_w = 170;  // [60:0.1:540]
+// Overall depth: housing back to the drawer's front, with the front panel and any wood face (at least about 108 with the pull-out catch)
+outer_d = 210;  // [60:0.1:540]
+// Overall height: desk to the drawer's bottom
+outer_h = 38;  // [20:0.1:330]
 // Side and front wall thickness (the back is always 2 mm, to fit the cassette)
 wall = 2; // [1:0.1:6]
 // Floor thickness
@@ -167,19 +167,25 @@ screw_head_d = screw_row(screw)[1] + 0.6;   // countersink diameter at flush
 // Extra recess below flush so heads never touch the drawer
 screw_recess = 0.4;
 
-// Smallest sizes that work with M3 captive nuts (bigger bolts need a little more width, mortise a little
-// less). Anything lower (e.g. a value the Customizer kept from an older version of this file) is raised to
-// the minimum, with a warning, instead of failing.
+// The overall size, less what's around the drawer's inside: across, the drawer's walls, lips, side gaps
+// and the housing's walls; front to back, the front (wall, panel, wood face) and the back wall; down
+// from the desk, the plate, the gap under it and the floor.
+add_w = 2*(wall + lip + side_clr + housing_wall);
+add_d = wall + panel_t + (wood_face ? wood_face_t : 0) + back_t;
+add_h = plate_t + top_gap + floor_t;
+// Smallest insides that work with M3 captive nuts (bigger bolts need a little more width, mortise a little
+// less). A size lower than that (e.g. a value the Customizer kept from an older version of this file) is
+// raised to it, with a warning, instead of failing.
 // Width: the kicker posts and the cassette's ears either side of the latch. Height: room for the cassette's
 // notch in the back wall. Depth: the latch arm and its band, spreader to back post; with the pull-out
 // catch a drawer stops about 35 mm short of its depth, so it is kept deep enough to open about two thirds
 // of the way (and past the kicker's push).
 min_w = 84;  min_d = catch ? 100 : 62;  min_h = 17;
-in_w = max(inner_w, min_w);
-in_d = max(inner_d, min_d);
-in_h = max(inner_h, min_h);
-for (c = [["inner_w", inner_w, min_w], ["inner_d", inner_d, min_d], ["inner_h", inner_h, min_h]])
-  if (c[1] < c[2]) echo(str("WARNING: ", c[0], " = ", c[1], " is below the minimum – using ", c[2], " mm"));
+in_w = max(outer_w - add_w, min_w);
+in_d = max(outer_d - add_d, min_d);
+in_h = max(outer_h - add_h, min_h);
+for (c = [["outer_w", outer_w, min_w + add_w], ["outer_d", outer_d, min_d + add_d], ["outer_h", outer_h, min_h + add_h]])
+  if (c[1] < c[2] - 1e-6) echo(str("WARNING: ", c[0], " = ", c[1], " is below the minimum – using ", round(c[2]*10)/10, " mm"));
 // ------------------------------------------------------------- derived
 Wd = in_w + 2*wall;            // drawer outer width (body)
 Dd = in_d + wall + back_t;     // drawer outer depth (body)
@@ -338,7 +344,7 @@ catch_u2 = catch_u1 + (cam_rest_v + catch_h + catch_o) / tan(catch_angle);   // 
 mouth_spec = !catch ? [[-x_cam0 - 5, 0], [0, 0]]
   : [[-x_cam0 - 5, cam_rest_v], [catch_u0, cam_rest_v, 2], [catch_u1, cam_rest_v + catch_h + catch_o, catch_r],
      [catch_u2, 0, 2], [0, 0]];
-assert(catch_u2 < 0 && fillet_fits(mouth_spec), "no room for the pull-out catch – raise inner_d");
+assert(catch_u2 < 0 && fillet_fits(mouth_spec), "no room for the pull-out catch – raise outer_d");
 mouth_path = fillet_path(mouth_spec);
 catch_uf = catch ? catch_u2 + 2*tan(catch_angle/2) : -x_cam0;   // pulled out, the pin meets the catch (or the front) here
 groove_y0 = yb - cam_rest_v + v_l  - r_eff;   // groove lateral extent in housing coords
@@ -487,7 +493,9 @@ wf_zs = [for (f = in_h >= 50 ? [0.25, 0.75] : [0.5]) z_bot + floor_t + f*in_h];
 assert(k_a >= k_amin, "kicker posts too close together for the latch pocket – raise k_band");
 assert(k_stretch <= 2.5, "kicker band stretched too far – raise k_band");
 assert(k_xf > pocket_x0, "kicker bays reach past the front of the latch pocket");
-assert(k_fit, "the cassette doesn't fit – increase inner_w (or inner_h)");
+assert(k_fit, "the cassette doesn't fit – increase outer_w (or outer_h)");
+echo(str("Overall ", r1(2*y_ho), " x ", r1(Dd + panel_t + (wood_face ? wood_face_t : 0)), " x ", r1(-z_bot), " mm closed; inside the drawer ",
+         r1(in_w), " x ", r1(in_d), " x ", r1(in_h), " mm"));
 echo(str("Drawer body ", Wd, " x ", Dd, " x ", Hd, " mm; housing ", 2*y_ho, " x ", Dh,
          " x ", -z_hbot, " mm (+ kicker posts)"));
 echo(str("Latched drawer sits ", u_stop - u_a, " mm proud; push-release travel the same"));
@@ -527,22 +535,22 @@ else if (panel_t == 0) echo("WARNING: with no front panel and no wood face the d
 echo(str("Latch centring band: loop path ", round(cband_loop), " mm -> use a band of ~",
          round(cband_loop/1.5), " mm circumference (flat length ~", round(cband_loop/3),
          " mm), or a smaller one doubled"));
-assert(z_arm - 2 > z_bot + floor_t, "Drawer too shallow for the latch arm – increase inner_h");
+assert(z_arm - 2 > z_bot + floor_t, "Drawer too shallow for the latch arm – increase outer_h");
 assert(throw_r < arm_r - 8, "arm_r too short for the cam's sideways travel");
 assert(x_bpost - cpost_d/2 - spool_fl - x_tip >= 1.5, "cband_back too short – band post hits the arm tip");
 assert(band_y(x_pv) >= hub_d/2 + 0.4, "latch band strands rub the arm's hub – increase cband_spread");
 assert(band_y(x_pin) <= arm_w/2 - 0.4, "latch band strands don't press on the arm tip – reduce cband_spread or widen arm_w");
-assert(pocket_x0 > wall + 5, "inner_d too small for the latch pocket");
-assert(x_cam0 > 8, "inner_d too small for the latch groove");
+assert(pocket_x0 > wall + 5, "outer_d too small for the latch pocket");
+assert(x_cam0 > 8, "outer_d too small for the latch groove");
 assert(x_cam0 + U + r_eff < Dh, "cam does not fit");
 assert(pocket_y1 < Wd/2 - wall - 5 && pocket_y0 > -Wd/2 + wall + 5,
-       "latch pocket hits a side wall – inner_w too small or latch_y too far off-centre");
+       "latch pocket hits a side wall – outer_w too small or latch_y too far off-centre");
 assert(screw_y + screw_cs_r < y_li, "screw countersink overlaps the slide ledge");
 assert(groove_y1 + 1 + screw_head_d/2 < screw_y && groove_y0 - 1 - screw_head_d/2 > -screw_y,
        "latch groove runs into a screw row – move latch_y toward the centre");
 assert(yk + k_a - kp_r > groove_y1 + 1 && yk - k_a + kp_r < groove_y0 - 1,
        "kicker posts run into the latch groove");
-assert(c_deep, str("drawer too shallow for the latch cassette – inner_h needs about ", c_need_h));
+assert(c_deep, str("drawer too shallow for the latch cassette – outer_h needs about ", c_need_h + add_h));
 assert(cm_nut || cm_mort || cassette_mount == "normal", "cassette_mount must be captive_nut, normal or mortise");
 assert(cm_mort || len(cb_row) > 0, "cassette_bolt must be 2.5, 3, 4 or 5");
 

@@ -6,7 +6,7 @@
 # mortise_clr, arm_clr ...), it goes in that preset's folder instead.
 # "Differs" means another volume or bounding box (tools/stl_sig.awk), not other bytes: the same part
 # exported for two drawers comes out with its vertices up to 0.01 mm apart.
-# Folders are named by the interior size actually built (a preset below the minimum is raised).
+# Folders are named by the overall size actually built (a preset below the minimum is raised).
 # Refuses to run with uncommitted changes to the model, so every STL comes from a commit.
 # Usage: sh tools/export_stls.sh        (from the repo root; needs git and OpenSCAD)
 set -e
@@ -28,11 +28,11 @@ grep -o '"New set [0-9]*"' underdesk_drawer.json | tr -d '"' | while IFS= read -
   n=${p##* }
   run() { "$OS" -o "$2" -p "$tmp/presets.json" -P "$p" -D "part=\"$1\"" underdesk_drawer.scad > "$tmp/$n-$1.log" 2>&1; }
   run housing "$tmp/$n-housing.stl"
-  # interior size as built: inner_w/d/h from the drawer body's outer size isn't exact, so take the
-  # preset's values and any "below the minimum – using N mm" the model reported
+  # overall size as built: the preset's outer_w/d/h, or the "below the minimum – using N mm" the
+  # model reported instead
   vals=$(sed -n "/\"$p\"/,/}/p" underdesk_drawer.json)
   size=""
-  for k in inner_w inner_d inner_h; do
+  for k in outer_w outer_d outer_h; do
     v=$(sed -n "s/.*WARNING: $k = .* using \([0-9.]*\) mm.*/\1/p" "$tmp/$n-housing.log")
     [ -n "$v" ] || v=$(echo "$vals" | sed -n "s/.*\"$k\": \"\([0-9.]*\)\".*/\1/p" | awk '{printf "%g", $1}')
     size="$size${size:+x}$v"
