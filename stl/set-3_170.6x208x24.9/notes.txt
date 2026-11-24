@@ -1,4 +1,4 @@
-Preset: New set 3    model commit: dc2842d
+Preset: New set 3    model commit: f6d2949
 
 Overall 170.6 x 208 x 24.9 mm closed; inside the drawer 150 x 200 x 17 mm
 Drawer body 154 x 204 x 19.4 mm; housing 170.6 x 204 x 15.195 mm (+ kicker posts)

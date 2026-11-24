@@ -1,4 +1,4 @@
-Preset: New set 2    model commit: dc2842d
+Preset: New set 2    model commit: f6d2949
 
 WARNING: outer_w = 65.6 is below the minimum – using 102.6 mm
 WARNING: outer_d = 66 is below the minimum – using 104 mm
