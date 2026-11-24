@@ -1,7 +1,8 @@
-Preset: New set 2    model commit: 7ad4169
+Preset: New set 2    model commit: 139c051
 
-WARNING: inner_w = 47 is below the minimum – using 84 mm
-WARNING: inner_d = 62 is below the minimum – using 100 mm
+WARNING: outer_w = 65.6 is below the minimum – using 102.6 mm
+WARNING: outer_d = 66 is below the minimum – using 104 mm
+Overall 102.6 x 104 x 24.9 mm closed; inside the drawer 84 x 100 x 17 mm
 Drawer body 86 x 103 x 19.4 mm; housing 102.6 x 103 x 15.195 mm (+ kicker posts)
 Latched drawer sits 7.4 mm proud; push-release travel the same
 Latch cassette 81 mm wide (with its ears), 59 deep: room beside it at the back: 1 mm on the left, 1 mm on the right
