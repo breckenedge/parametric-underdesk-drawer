@@ -48,7 +48,7 @@ inner_h = 30;  // [17:0.1:300]
 // Side and front wall thickness (the back is always 2 mm, to fit the cassette)
 wall = 2; // [1:0.1:6]
 // Floor thickness
-floor_t = 1.6; // [0.8:0.1:5]
+floor_t = 2.4; // [0.8:0.1:5]
 // Front panel thickness (on top of the front wall). 0 = no panel: the wood face goes straight on the box and is the closing stop
 panel_t = 4; // [0:0.1:15]
 
@@ -90,7 +90,7 @@ latch_band_n = 2; // [0.5:0.1:20]
 // Gap across the 45° sliding faces
 slide_clr = 0.35; // [0:0.05:1.5]
 // Gap between the drawer's lips and the housing's sides
-side_clr = 0.6; // [0:0.05:2]
+side_clr = 0.3; // [0:0.05:2]
 // Gap around the latch pin in its groove
 pin_clr = 0.35; // [0.1:0.05:0.6]
 // Gap around the latch arm's pivot post
@@ -104,7 +104,7 @@ mortise_clr = 0.15; // [0:0.05:0.6]
 lip = 5;              // 45° lip on each side of the drawer
 lip_edge = 1.5;       // vertical flat on the lip tip
 ledge_min = 3;        // material under the ledge's 45° face at its thinnest
-top_gap = 1;          // drawer rim to housing plate
+top_gap = 0.5;        // drawer rim to housing plate
 panel_top_gap = 1;    // front panel's top edge to the desk
 // Vertical corners, rounded because a sharp corner is where a print curls off the bed first. Not the
 // housing's front ones: the front panel stops against that face
@@ -141,7 +141,7 @@ catch_angle = 60;     // steepness on the way out, degrees off the direction of 
 back_t = 2;           // drawer's back wall, and the cassette's back that fills the notch in it
 mortise_angle = 20;   // the dovetail's side angle
 // Kicker
-band_stroke = 32;     // how far it pushes (raised to what the latch needs if lower)
+band_stroke = 36;     // how far it pushes (raised to what the latch needs if lower); the nose's curved back takes ~4 of it
 post_d = 6;
 k_band = 50.8;        // band's flat length (2"); it sets how far apart the posts are
 // Plate windows. Once screwed up, the desk carries the housing: the drawer hangs on the rails, the
@@ -396,7 +396,6 @@ kp_f = 1.5;                    // 45° flare (radius added) above and below the 
 kp_r = kp_d/2 + kp_f;          // post's widest radius
 kp_clr = 1;                    // post to drawer clearance
 k_bw = 1.2;                    // bay wall thickness
-k_rc = 2;                      // nose corners rounded, where the band wraps them
 z_kb = z_rim - 3;              // band height: 3 mm under the rim
 z_kbot = z_kb - 1.5 - kp_f - 1.5;   // post's bottom
 z_knb = z_kbot - kp_clr;       // notch floor
@@ -405,11 +404,26 @@ x_kp = Dd - k_s + kp_d/2;      // posts: the band's front strand touches the nos
 yk = (pocket_y0 + pocket_y1)/2;    // centred on the latch pocket, so it pushes straight on the latch
 k_n = (pocket_y1 - pocket_y0)/2;   // half-width of the nose (the pocket's outer faces)
 k_pre = 1.2;                   // the band's stretch when the drawer is open
-// band loop length with the nose at x = X (drawer's back), posts yk +- a: both strands (front and
-// rear of the posts) run straight across until the nose reaches them, then post -> nose corner ->
-// other corner -> other post
+// The nose's back, where the band wraps it, is one shallow arc across its width, its corners k_sag
+// forward of its middle, blended into the sides on k_rc fillets: the band bears on the whole back
+// instead of on two sharp corners. k_half: half its outline from the middle (0, 0) out to the side
+// (y = k_n), x forward negative.
+k_sag = 4;
+k_rc = 5;
+k_R = (k_n*k_n + k_sag*k_sag) / (2*k_sag);                               // the arc's radius
+k_fc = [-k_R + sqrt(pow(k_R - k_rc, 2) - pow(k_n - k_rc, 2)), k_n - k_rc];  // fillet centre
+k_phi = atan2(k_fc[1], k_fc[0] + k_R);                                    // where arc meets fillet
+k_half = concat([for (i = [0:12]) let(t = k_phi*i/12) [k_R*(cos(t) - 1), k_R*sin(t)]],
+                [for (i = [1:8]) let(t = k_phi + (90 - k_phi)*i/8) k_fc + k_rc*[cos(t), sin(t)]]);
+// band loop length with the nose's middle at x = X (drawer's back), posts yk +- a: both strands
+// (front and rear of the posts) run straight across until the nose reaches them, then each half
+// runs from its post onto the nose where it meets it tangentially, and round the back to the middle
+function k_tan(X, xj, a) = let(ang = [for (p = k_half) atan2(X + p[0] - xj, a - p[1])], m = max(ang))
+  [for (i = [0:len(k_half)-1]) if (ang[i] == m) i][0];                  // that tangent point's index
+function k_wrap(X, xj, a) = let(i = k_tan(X, xj, a), p = k_half[i])
+  norm([X + p[0] - xj, a - p[1]]) + (i == 0 ? 0 : sum([for (k = [1:i]) norm(k_half[k] - k_half[k-1])]));
 function k_len(X, a) = PI*kp_d + sum([for (xj = [x_kp - kp_d/2, x_kp + kp_d/2])
-  X > xj ? 2*k_n + 2*norm([a - k_n, X - xj]) : 2*a]);
+  X > xj ? 2*k_wrap(X, xj, a) : 2*a]);
 k_rp = kp_r + kp_clr;                          // post's swept radius, with its clearance
 k_xf = x_kp - k_rp - k_bw;                     // the bays' front walls
 k_amin = k_n + k_rp + 0.3;                      // post track clear of the pocket wall
@@ -711,22 +725,53 @@ module latch_band_posts() {
   hull() for (s = [-1,1]) band_spool(x_sp, yb + s*(cband_spread/2 - cpost_d/2));   // spreader
 }
 
-// kicker, drawer side. The notch: where the posts run (from x_kp out through the back wall) and
-// where the band's strands run from them to the nose corners when closed, plus everything behind the
-// drawer, with the nose corners rounded (k_rc) where the band wraps them. Cut from just under the
-// posts' bottom up through the rim.
+// kicker, drawer side. The notch: where the posts run (from x_kp out through the back wall), plus
+// everything behind the nose's curved back (k_half) down to just in front of its corners, so the
+// band's strands from the posts meet only that curve. Cut from just under the posts' bottom up
+// through the rim.
+module nose_2d() {   // the nose in plan: the pocket's width, back to the curve, its middle at Dd
+  polygon(concat([[Dd - 30, yk - k_n]],
+                 [for (i = [len(k_half)-1:-1:0]) [Dd + k_half[i][0], yk - k_half[i][1]]],
+                 [for (i = [1:len(k_half)-1]) [Dd + k_half[i][0], yk + k_half[i][1]]],
+                 [[Dd - 30, yk + k_n]]));
+}
+k_x0 = Dd - back_t - k_sag - k_rc;   // the back's curve starts no further forward than this
 module kick_cut_2d() {
-  offset(r = -k_rc) offset(r = k_rc) union() {
-    for (s = [-1, 1]) hull() {
-      translate([x_kp, yk + s*k_a]) circle(r = k_rp);
-      translate([Dd + 3, yk + s*k_a]) circle(r = k_rp);
-      translate([Dd, yk + s*k_n]) square(eps, center = true);
-      translate([Dd + 3, yk + s*k_n]) square(eps, center = true);
-    }
-    translate([Dd, yk - k_a - k_rp]) square([10, 2*(k_a + k_rp)]);
+  for (s = [-1, 1]) hull() {
+    translate([x_kp, yk + s*k_a]) circle(r = k_rp);
+    translate([Dd + 3, yk + s*k_a]) circle(r = k_rp);
+  }
+  difference() {
+    translate([k_x0, yk - k_a - k_rp]) square([Dd + 10 - k_x0, 2*(k_a + k_rp)]);
+    nose_2d();
+  }
+}
+// the nose's back wall, back_t thick along the curve, so it stays that thick where the corners
+// come forward of the drawer's back wall (it fills the pocket's back corners)
+module nose_wall_2d() {
+  intersection() {
+    difference() { nose_2d(); offset(r = -back_t) nose_2d(); }
+    translate([k_x0, yk - k_n]) square([Dd - k_x0, 2*k_n]);
   }
 }
 module kick_notch() { translate([0, 0, z_knb]) linear_extrude(z_rim - z_knb + 1) kick_cut_2d(); }
+// a lip round the top of the nose, over the band: it flares out at 45° from the top of the posts'
+// band seat (z_kb + 1.5) to k_lip at the rim, like the posts' flares, so the band's pull slides it
+// back down and a loose or oversized band can't ride up over the nose into the latch pocket. It
+// runs round the curved back and along the pocket's sides as far forward as the posts; it is the
+// only part of the cassette behind the drawer's back (k_lip at the middle).
+k_lip = z_rim - (z_kb + 1.5);
+module nose_lip() {
+  z0 = z_rim - k_lip;
+  difference() {
+    hull() {
+      translate([0, 0, z0]) linear_extrude(eps) nose_2d();
+      translate([0, 0, z_rim - eps]) linear_extrude(eps) offset(r = k_lip) nose_2d();
+    }
+    translate([0, 0, z0 - 1]) linear_extrude(k_lip + 2) offset(r = -1) nose_2d();   // 1 mm into the walls
+    translate([0, 0, z0 - 1]) linear_extrude(k_lip + 2) translate([Dd - 40, yk - k_n - k_lip - 1]) square([x_kp - Dd + 40, 2*(k_n + k_lip + 1)]);
+  }
+}
 // the bays: a front wall and an outer wall around each post's notch, so nothing in the drawer sits
 // where the posts go (the pocket's side wall and the back wall close them off)
 module kick_bays() {
@@ -737,7 +782,7 @@ module kick_bays() {
 }
 // the latch cassette (the same for every drawer): the latch pocket, pivot, tip support and band posts and the kicker bays, on a
 // tray at z_mf, printed flat on its tray; its back wall fills the notch in the drawer's
-// back and is the kicker's nose. An ear either side sits
+// back and is the kicker's nose, its back curved (k_half). An ear either side sits
 // against the back's inner face: bolted through it (cassette_mount captive_nut or normal, on
 // vertical slots so its height can be set flush with the rim), or for mortise just a stop, the back
 // wall then being a dovetail in the notch that rests on the notch's floor.
@@ -754,9 +799,11 @@ module c_back_2d(c = 0, ext = 0) {
 }
 module cassette() {
   ys0 = yc0 - ear_w;
+  nose_lip();
   difference() {
     union() {
       latch_pocket(); latch_pivot(); latch_tip_support(); latch_band_posts(); kick_bays();
+      translate([0, 0, z_cb]) linear_extrude(z_rim - z_cb) nose_wall_2d();                    // curved back
       // tray: only under the walls' outline – the pocket, and the two kicker bays beside it
       translate([pocket_x0, pocket_y0, z_cb]) cube([Dd - back_t - pocket_x0 + eps, pocket_y1 - pocket_y0, ct_t]);
       translate([k_xf, yc0, z_cb]) cube([Dd - back_t - k_xf + eps, yc1 - yc0, ct_t]);
@@ -978,10 +1025,13 @@ module scene(pin, hmode, dmode) {
     }
   }
   // kicker band: its two strands straight across between its posts, or, once the drawer's back
-  // reaches them, from the posts round the back of the latch pocket
+  // reaches them, from the posts round the curved back of the latch pocket
   color("Black") let(X = Dd - open + 0.6)
     for (xj = [x_kp - kp_d/2 - 0.5, x_kp + kp_d/2 + 0.5]) let(
-      P = X > xj ? [[xj, yk - k_a], [X, yk - k_n], [X, yk + k_n], [xj, yk + k_a]] : [[xj, yk - k_a], [xj, yk + k_a]])
+      P = X > xj ? let(n = k_tan(X, xj, k_a)) concat([[xj, yk - k_a]],
+            [for (i = [n:-1:0]) [X + k_half[i][0], yk - k_half[i][1]]],
+            [for (i = [0:n]) [X + k_half[i][0], yk + k_half[i][1]]], [[xj, yk + k_a]])
+          : [[xj, yk - k_a], [xj, yk + k_a]])
       for (i = [0:len(P)-2]) hull() for (p = [P[i], P[i+1]]) translate([p[0], p[1], z_kb]) sphere(d = 1.2, $fn = 8);
 }
 
