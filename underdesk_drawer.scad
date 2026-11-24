@@ -59,6 +59,10 @@ wood_face = false;
 wood_face_t = 12; // [6:0.1:30]
 // Countersunk wood screw size
 wood_face_screw = 3.5; // [3.5:#6 / 3.5 mm, 4:#8 / 4 mm, 4.5:#9 / 4.5 mm, 5:#10 / 5 mm]
+// Holes in the back wall in line with the screws, to drive them with a long screwdriver from behind (fit the face before the cassette). Screws that would land behind the cassette's ears move in to go through its notch instead
+wood_face_access = false;
+// Access hole diameter: the screwdriver's shaft, with some room
+wood_face_access_d = 7; // [4:0.5:12]
 
 /* [Housing] */
 // Thickness of the plate against the desk
@@ -488,6 +492,7 @@ wf_r = (screw_row(wood_face_screw)[1] + 0.6)/2;  // countersink radius
 wf_n = max(2, ceil((in_w - 24)/200) + 1);
 wf_ys = [for (i = [0:wf_n-1]) -in_w/2 + 12 + i*(in_w - 24)/(wf_n - 1)];
 wf_zs = [for (f = in_h >= 50 ? [0.25, 0.75] : [0.5]) z_bot + floor_t + f*in_h];
+wa_r = wood_face_access_d/2;
 
 // ------------------------------------------------------------- checks
 assert(k_a >= k_amin, "kicker posts too close together for the latch pocket – raise k_band");
@@ -527,11 +532,16 @@ c_fix_txt = cm_mort ? "slide it down into the notch; the ears stop it on the ins
           : str("drop it into the notch; 2 M", cassette_bolt, " bolts through the back and its ear slots",
                 cm_nut ? ", into nuts pushed into the ears' hex slots" : ", with nuts");
 echo(str("Latch cassette mount: ", cassette_mount, " – ", c_fix_txt));
-if (wood_face) echo(str("Wood face: ", len(wf_ys)*len(wf_zs), " countersunk wood screws from inside the drawer, up to ",
+if (wood_face) echo(str("Wood face: ", len(wf_pts), " countersunk wood screws from inside the drawer, up to ",
   wall + panel_t + wood_face_t - 2, " mm long (", wall + panel_t, " mm of printed front + the wood, less 2). A face of ",
   r1(panel_w), " x ", r1(panel_h), " mm ", panel_t > 0 ? "just covers the printed front" :
   "just covers the housing; it is the closing stop, so keep it wider than the opening and tall enough to reach the housing's plate"));
 else if (panel_t == 0) echo("WARNING: with no front panel and no wood face the drawer has no closing stop, so the latch pin takes every push");
+if (wood_face && wood_face_access) echo(str("Wood face access: ", len(wf_pts), " holes of ", wood_face_access_d,
+  " mm in the back wall. Fit the face before the cassette (or take it out): drop each screw in, then drive it from behind,",
+  " the screwdriver reaching ", ceil(Dd - wall), " mm past the back wall", wf_moved ?
+  str("; the screws behind the cassette moved in to ", r1(wa_in), " mm from its centre, to go through its notch") : ""));
+if (!wood_face && wood_face_access) echo("WARNING: wood_face_access does nothing without wood_face");
 echo(str("Latch centring band: loop path ", round(cband_loop), " mm -> use a band of ~",
          round(cband_loop/1.5), " mm circumference (flat length ~", round(cband_loop/3),
          " mm), or a smaller one doubled"));
@@ -835,6 +845,16 @@ module cassette() {
 // slots). Mortise: the dovetail, mortise_clr clear, its floor the cassette's bottom.
 wn_c = cm_mort ? mortise_clr : 0.5;
 wn_z = cm_mort ? z_cb : z_cb - 1;
+// the wood face's screws [y, z]. With access holes, the screwdriver comes in through the back wall, so a
+// screw whose hole would land behind the cassette (its ears and bolts, with the cassette's height) moves
+// toward the middle until its hole is inside the notch, which is open once the cassette is out.
+wn_hw = (yc1 - yc0)/2 + wn_c;                     // notch half-width at the wall's inner face
+wa_in = wn_hw - wa_r - 0.5;                       // hole centre's furthest from yk inside the notch
+function wf_blocked(y, z) = let(a = abs(y - yk))
+  z + wa_r > wn_z - 1 && a > wa_in && a - wa_r < (yc1 - yc0)/2 + ear_w + 1;
+wf_pts = [for (y = wf_ys, z = wf_zs)
+  wood_face_access && wf_blocked(y, z) ? [yk + (y < yk ? -1 : 1)*wa_in, z] : [y, z]];
+wf_moved = wood_face_access && len([for (y = wf_ys, z = wf_zs) if (wf_blocked(y, z)) 1]) > 0;
 module c_notch_cut() {
   translate([0, 0, wn_z]) linear_extrude(z_rim - wn_z + 1) c_back_2d(wn_c, 1);
   if (!cm_mort) for (y = [yc0 - ear_w/2, yc1 + ear_w/2]) translate([Dd - back_t - 1, y, c_bolt_z]) rotate([0, 90, 0])
@@ -845,11 +865,14 @@ module c_notch_cut() {
 module wood_face_holes() {
   csk = wf_r - wf_d/2;                              // depth of the 45° countersink
   x0 = wall - min(0.3, wall + panel_t - csk - 1);   // where it is full size
-  for (y = wf_ys, z = wf_zs) translate([0, y, z]) rotate([0, 90, 0]) {
+  for (p = wf_pts) translate([0, p[0], p[1]]) rotate([0, 90, 0]) {
     translate([0, 0, -panel_t - 1]) cylinder(d = wf_d, h = wall + panel_t + 2);
     translate([0, 0, x0 - csk]) cylinder(r1 = wf_d/2, r2 = wf_r, h = csk);
     translate([0, 0, x0 - eps]) cylinder(r = wf_r, h = 2);
   }
+  // access holes for the screwdriver, through the back wall
+  if (wood_face_access) for (p = wf_pts) translate([Dd - back_t - 1, p[0], p[1]]) rotate([0, 90, 0])
+    cylinder(r = wa_r, h = back_t + 2);
 }
 // the wood itself, for the views, as big as the printed front (as the housing, without one)
 module wood_face_board() {
